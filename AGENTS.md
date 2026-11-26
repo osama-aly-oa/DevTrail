@@ -1,55 +1,25 @@
-# DevTrail — AI Agent Instructions
+# DevTrail — Engineering Instructions
 
-## Project Overview
+Codex implements engineering work under human supervision. Preserve working behavior and keep changes within the assigned scope.
 
-DevTrail is a developer journey and engineering reflection platform.
+## Sources of truth
 
-The project is also an educational Software Engineering exercise.
+- [Requirements](docs/REQUIREMENTS.md) defines the product scope and domain rules.
+- [Architecture](docs/ARCHITECTURE.md), [Database](docs/DATABASE.md), and [API](docs/API.md) define the approved system design and track implementation decisions.
+- [Roadmap](docs/ROADMAP.md) organizes delivery and records foundation verification.
+- [README](README.md) describes how to run and verify the current checkout. Use npm for backend scripts and dependency management.
 
-## Tech Stack
+## Engineering workflow
 
-- Backend: Node.js, Express 5, TypeScript
-- Database: PostgreSQL, Prisma
-- Validation: Zod
-- Testing: Vitest, Supertest
-- Frontend: React, TypeScript, Vite
-- Frontend libraries: React Router, Tailwind CSS, Axios, Redux Toolkit
-- Package Manager: npm
+- Inspect relevant code, tests, and documentation before making changes.
+- Prefer complete features and coherent delivery packages. Work in reviewable increments and explain decisions that affect behavior or maintenance.
+- Follow approved requirements and design. Make routine implementation decisions independently. Request approval before materially changing architecture, the technology stack, business requirements, or public API contracts.
+- Prefer simple, maintainable solutions. Reuse existing code where appropriate and avoid unnecessary abstractions, dependencies, and unrelated changes.
+- Add appropriate automated tests alongside features. Run the relevant verification commands before reporting completion, record the evidence, and identify any gaps, security risks, or technical debt.
+- Keep documentation synchronized with implementation. Identify which decisions are approved, which details are planned, and which behavior has been implemented and verified.
 
-## Architecture
+## Security and repository controls
 
-- Traditional Layered Monolith
-- Controllers, Services, Repositories
-- Centralized error handling
-- REST API with /api/v1 prefix
-
-## Engineering Rules
-
-- Follow the approved architecture.
-- Prefer simple, maintainable solutions.
-- Do not introduce unnecessary dependencies.
-- Do not implement features outside the assigned task.
-- Do not modify unrelated files.
-- Never hardcode or commit secrets.
-- Do not introduce JWT authentication; the MVP uses server-side sessions.
-- Do not use RTK Query for the MVP.
-
-## AI Collaboration
-
-- Explain important technical decisions.
-- Preserve opportunities for developer learning.
-- Work incrementally.
-- Review existing code before making changes.
-- Never assume generated code is correct.
-- Run relevant verification commands when possible.
-- Report any verification steps that could not be completed.
-- Do not create Git commits unless explicitly requested.
-
-## Current Development Scope
-
-Milestone M1: Project Foundation.
-
-F01: Repository initialization completed.
-F02: Backend Bootstrap — current task.
-
-Do not implement database migrations, authentication, or frontend functionality during F02.
+- Keep secrets out of source, commits, logs, documentation, and reports.
+- Obtain approval before destructive database operations.
+- Obtain explicit authorization before committing, pushing, or merging.
