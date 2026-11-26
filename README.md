@@ -32,6 +32,30 @@ Type-checking covers backend source and tests. `npm test` runs the HTTP integrat
 
 [Backend CI](.github/workflows/backend-ci.yml) runs `npm ci` and these checks from `backend/` on Ubuntu with Node.js 26.13.1. It runs on pull requests targeting `main` and pushes to `main`. See the [roadmap](docs/ROADMAP.md#m1-foundation-evidence) for verification results.
 
+## Spec-driven development
+
+Use [GitHub Spec Kit](https://github.com/github/spec-kit) for the next bounded change in the
+[approved roadmap](docs/ROADMAP.md#approved-delivery-packages). Open the repository in Codex
+with Python 3.11 or newer available as `python`. The checked-in skills are ready to use.
+For Spec Kit CLI maintenance, install the pinned release in an isolated Python environment
+with `python -m pip install specify-cli==1.4.5` and verify it with specify version.
+The generated Spec Kit files are distributed under the [upstream license](.specify/LICENSE).
+
+1. Start from the intended base on a dedicated Git branch. Run `$speckit-specify` in Codex
+   with the requested outcome and compatibility boundaries. Link the affected engineering
+   documents and record acceptance criteria and applicable test requirements in `specs/`.
+2. Use `$speckit-clarify` for open questions, then `$speckit-plan` to check the design
+   against the [constitution](.specify/memory/constitution.md) and include relevant
+   automated tests and verification commands. Resolve approval-required decisions
+   according to [AGENTS.md](AGENTS.md).
+3. Run `$speckit-tasks` to turn the plan into implementation and test tasks, then
+   review alignment with `$speckit-analyze`.
+4. Run `$speckit-implement` after reviewing the artifacts. Use `$speckit-converge` to
+   check for gaps and record verification results in the pull request.
+
+The feature artifacts describe the change under review. Link to the engineering
+documentation below for existing behavior and approved decisions.
+
 ## Engineering documentation
 
 - [Requirements](docs/REQUIREMENTS.md)
