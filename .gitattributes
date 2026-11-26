@@ -1,0 +1,3 @@
+# Spec Kit manifests track byte-level hashes of generated files.
+.agents/skills/speckit-*/SKILL.md text eol=lf
+.specify/** text eol=lf

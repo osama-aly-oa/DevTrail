@@ -11,6 +11,7 @@ Codex implements engineering work under human supervision. Preserve working beha
 
 ## Engineering workflow
 
+- Use the [Spec Kit workflow](README.md#spec-driven-development) and [constitution](.specify/memory/constitution.md) for new features and material changes. Link to the approved sources above from feature artifacts and apply the existing approval controls.
 - Inspect relevant code, tests, and documentation before making changes.
 - Prefer complete features and coherent delivery packages. Work in reviewable increments and explain decisions that affect behavior or maintenance.
 - Follow approved requirements and design. Make routine implementation decisions independently. Request approval before materially changing architecture, the technology stack, business requirements, or public API contracts.
