@@ -29,4 +29,4 @@ Outside the MVP are public registration, multi-user functionality, role-based ac
 
 ## Implementation status
 
-The current branch implements the backend foundation. All MVP product features are pending. See the [database design](DATABASE.md#selected-text-limits) for text limits and the [API contract](API.md#approved-mvp-routes) for the project deletion route.
+Package 01 implements owner authentication and the project and development session backend. The Daily Timeline and Project Journey Review screens, including permanent-deletion confirmation, are Package 02 work. [API contract](API.md) · [Delivery status and verification](ROADMAP.md)

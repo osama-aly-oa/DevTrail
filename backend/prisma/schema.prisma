@@ -1,0 +1,57 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "ts"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Project {
+  id          BigInt               @id @default(autoincrement())
+  name        String
+  description String?
+  createdAt   DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime             @default(now()) @updatedAt @db.Timestamptz(3)
+  sessions    DevelopmentSession[]
+
+  @@index([createdAt(sort: Desc), id(sort: Desc)], map: "project_order_idx")
+  @@map("project")
+}
+
+model DevelopmentSession {
+  id            BigInt   @id @default(autoincrement())
+  projectId     BigInt
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  sessionDate   DateTime @db.Date
+  workSummary   String
+  workFocus     String?
+  learningNotes String?
+  difficulties  String?
+  nextSteps     String?
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+
+  @@index([sessionDate(sort: Desc), createdAt(sort: Desc), id(sort: Desc)], map: "development_session_order_idx")
+  @@index([projectId, sessionDate(sort: Desc), createdAt(sort: Desc), id(sort: Desc)], map: "development_session_project_order_idx")
+  @@map("development_session")
+}
+
+model Owner {
+  id           Int    @id @default(1) @db.SmallInt
+  username     String
+  passwordHash String
+
+  @@map("owner_account")
+}
+
+model HttpSession {
+  sid    String   @id
+  sess   Json     @db.Json
+  expire DateTime @db.Timestamptz(3)
+
+  @@index([expire], map: "http_session_expire_idx")
+  @@map("http_session")
+}

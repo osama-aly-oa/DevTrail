@@ -25,9 +25,10 @@ These initial limits balance short labels with room for notes. Count Unicode cod
 
 ## Package 01 design work
 
-- Select the case-insensitive uniqueness mechanism and define collation and normalization behavior. A unique expression index is a candidate if its comparison semantics match the intended behavior. Test the chosen behavior in PostgreSQL. [PostgreSQL expression indexes](https://www.postgresql.org/docs/current/indexes-expressional.html)
-- Evaluate supporting indexes using the implemented session queries. Cover date filtering and ordering for the timeline, and project-filtered ordering and foreign key lookups for project review and restricted deletion. Confirm the query plans before adding indexes.
+The migration applies NFC normalization and an ICU root collation that ignores case while preserving accent differences for the project-name unique index. Integration tests verify equivalent accented forms collide and accent distinctions remain significant.
+
+The migration adds ordering indexes for projects and date-ordered sessions. The project-scoped session index also supports foreign-key lookups for restricted deletion. A database guard checks session dates in Europe/Istanbul on insert and date-changing update, alongside the application rule.
 
 ## Implementation status
 
-The Prisma schema, migrations, owner seed, and session storage are pending. See the [authentication design](ARCHITECTURE.md#approved-authentication-design).
+The Prisma schema and migration define projects, development sessions, the singleton owner account and the server-side session store. PostgreSQL enforces identity, required data, text limits, name uniqueness, referential integrity and future-date rejection. [Backend setup](../README.md#backend-setup-and-development) · [Verification](ROADMAP.md#package-01-verification)

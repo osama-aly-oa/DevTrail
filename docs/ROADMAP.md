@@ -5,10 +5,10 @@
 | Milestone | Scope | Status |
 | --- | --- | --- |
 | M1 | Project Foundation | F01–F04 are implemented and locally verified on the foundation branch. Backend CI is configured. Formal acceptance is pending. |
-| M2 | Database | Package 01 · Pending |
-| M3 | Authentication | Packages 01–02 · Pending |
-| M4 | Projects | Packages 01–02 · Pending |
-| M5 | Development Sessions | Packages 01–02 · Pending |
+| M2 | Database | Package 01 implemented for review. |
+| M3 | Authentication | Backend implemented for review. UI pending in Package 02. |
+| M4 | Projects | Backend implemented for review. UI pending in Package 02. |
+| M5 | Development Sessions | Backend implemented for review. UI pending in Package 02. |
 | M6 | Daily Timeline & Project Journey Review | Package 02 · Pending |
 | M7 | Quality, Documentation & Deployment | Packages 03–04 · Pending. Essential CI starts early. |
 
@@ -35,9 +35,17 @@ Deliver packages in reviewable increments with automated tests, local verificati
 
 | Package | Scope |
 | --- | --- |
-| 01 — Backend Core | PostgreSQL and Prisma migrations, owner authentication and session management, Projects and Development Sessions APIs, validation and centralized errors, automated backend and database integration tests. Define the exact product API contracts during implementation. |
+| 01 — Backend Core | PostgreSQL and Prisma migrations, owner authentication and session management, Projects and Development Sessions APIs, validation and centralized errors, automated backend and database integration tests. Publish the product contracts in the canonical API document. |
 | 02 — Complete Frontend | React application setup, authentication UI, project and development session management, Daily Timeline, Project Journey Review, and backend integration. |
 | 03 — Engineering Quality | Security review, end-to-end tests, bug fixes, performance review, and necessary refactoring. |
 | 04 — Production Release | Production configuration, CI/CD for release, deployment, and final documentation. |
 
 The foundation includes essential backend CI. Extend it with integration checks as they become available.
+
+## Package 01 verification
+
+On 2026-11-26, Node 26.13.1, npm 10.8.3 and PostgreSQL 18 passed the locked install, Prisma validation, type-check, 12 regular tests, 26 PostgreSQL integration tests and production build. The install audit reported zero known vulnerabilities at the time of verification. Clean migration, owner seed, and HTTP health and login worked against PostgreSQL from both source and compiled entry points.
+
+The database suite verifies migration reapplication, persisted sessions across restart, cookie and request protections, authorization failures, sanitized errors, simultaneous writes, and data constraints. A date rejected by the PostgreSQL Istanbul guard returns HTTP 400 on create and date-changing update. The tests verify neither rejected operation persists a change.
+
+On a disposable fixture of 500 projects and 30,000 development sessions, PostgreSQL selected the project order index, the all-session date order index, and the project-scoped session index for date-filtered history and project-reference lookup. Package acceptance remains subject to independent review. [Backend CI configuration](../.github/workflows/backend-ci.yml)

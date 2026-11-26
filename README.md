@@ -2,35 +2,40 @@
 
 DevTrail is a Developer Journey and Engineering Reflection Platform for recording development work, lessons learned, technical difficulties, and next steps across software projects.
 
-The checkout contains the Express and TypeScript backend foundation. `frontend/` is a placeholder. See the [roadmap](docs/ROADMAP.md) for implementation status and verification evidence.
+The Backend Core provides owner authentication, projects and development sessions. The frontend is a placeholder. [Delivery status and verification](docs/ROADMAP.md)
 
 ## Backend setup and development
 
-Use Node.js 26.13.1 and npm 10.8.3, the versions used to verify the foundation. From the repository root, install the locked backend dependencies and start the server in watch mode.
+Use Node.js 26.13.1, npm 10.8.3 and a local PostgreSQL 18 database with UTF-8 and ICU support. From `backend/`, copy `.env.example` to `.env` and fill in the values locally.
+
+- Set `DATABASE_URL` to a PostgreSQL connection URL for the local database.
+- Set `SESSION_SECRET` to a randomly generated 32-byte secret encoded as 64 hexadecimal characters.
+- Set `OWNER_USERNAME` and `OWNER_PASSWORD` for initial provisioning. Use a nonblank password of 12–256 Unicode code points. Repeating provisioning retains the original password and rejects a different username.
+- For local development, set `APP_ORIGIN` to the actual browser origin. The example uses `http://localhost:3000`. Set `PORT` to the listener port, defaulting to 3000.
+- Deployed browser origins require HTTPS. Set `TRUSTED_PROXY_IPS` only when using an explicitly trusted proxy.
 
 ```sh
-cd backend
 npm ci
+npm run db:migrate
+npm run db:seed
 npm run dev
 ```
 
-Both development and production startup read an optional `backend/.env`. Copy `backend/.env.example` to `backend/.env` to configure the local port. A process-level `PORT` takes precedence. The default is `3000`, and valid values are whole numbers from `1` to `65535`. The current backend runs without a database.
-
-At the default port, `GET http://localhost:3000/api/v1/health` returns HTTP 200 with `{"status":"ok"}`.
+At the default port, `GET http://localhost:3000/api/v1/health` returns HTTP 200 with `{"status":"ok"}`. Backend startup requires database connectivity. Use `npm run build` followed by `npm start` to run the compiled server.
 
 ## Testing and build
 
-Run these from `backend/`.
+From `backend/`, run the following checks. Supply `TEST_DATABASE_URL` through the process environment for a dedicated disposable database named `devtrail_test_*`, distinct from the application database. The integration suite applies migrations in a fresh schema and cleans up that schema after the run.
 
 ```sh
+npm run db:validate
 npm run typecheck
 npm test
+npm run test:db
 npm run build
 ```
 
-Type-checking covers backend source and tests. `npm test` runs the HTTP integration suite once. Use `npm run test:watch` during development. The build emits production JavaScript to `backend/dist/`. Stop the development server before starting the compiled server on the same port with `npm start`.
-
-[Backend CI](.github/workflows/backend-ci.yml) runs `npm ci` and these checks from `backend/` on Ubuntu with Node.js 26.13.1. It runs on pull requests targeting `main` and pushes to `main`. See the [roadmap](docs/ROADMAP.md#m1-foundation-evidence) for verification results.
+[Backend CI](.github/workflows/backend-ci.yml) runs the same checks with a PostgreSQL 18 service for pull requests targeting `main` and pushes to `main`.
 
 ## Spec-driven development
 
