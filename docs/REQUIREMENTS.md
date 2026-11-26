@@ -29,4 +29,4 @@ Outside the MVP are public registration, multi-user functionality, role-based ac
 
 ## Implementation status
 
-Package 01 implements owner authentication and the project and development session backend. The Daily Timeline and Project Journey Review screens, including permanent-deletion confirmation, are Package 02 work. [API contract](API.md) · [Delivery status and verification](ROADMAP.md)
+Packages 01 and 02 deliver the owner workspace, project and development session management, Daily Timeline, and Project Journey Review. Both deletion flows require confirmation. [API contract](API.md) · [Delivery status and verification](ROADMAP.md#package-02-verification)
