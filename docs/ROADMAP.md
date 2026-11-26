@@ -5,11 +5,11 @@
 | Milestone | Scope | Status |
 | --- | --- | --- |
 | M1 | Project Foundation | F01–F04 are implemented and locally verified on the foundation branch. Backend CI is configured. Formal acceptance is pending. |
-| M2 | Database | Package 01 implemented for review. |
-| M3 | Authentication | Backend implemented for review. UI pending in Package 02. |
-| M4 | Projects | Backend implemented for review. UI pending in Package 02. |
-| M5 | Development Sessions | Backend implemented for review. UI pending in Package 02. |
-| M6 | Daily Timeline & Project Journey Review | Package 02 · Pending |
+| M2 | Database | Package 01 merged. |
+| M3 | Authentication | Backend merged. Owner sign-in, restoration, and sign-out implemented in Package 02. |
+| M4 | Projects | Backend merged. Project management implemented in Package 02. |
+| M5 | Development Sessions | Backend merged. Session recording and management implemented in Package 02. |
+| M6 | Daily Timeline & Project Journey Review | Package 02 implemented for review. |
 | M7 | Quality, Documentation & Deployment | Packages 03–04 · Pending. Essential CI starts early. |
 
 ## M1 foundation evidence
@@ -49,3 +49,11 @@ On 2026-11-26, Node 26.13.1, npm 10.8.3 and PostgreSQL 18 passed the locked inst
 The database suite verifies migration reapplication, persisted sessions across restart, cookie and request protections, authorization failures, sanitized errors, simultaneous writes, and data constraints. A date rejected by the PostgreSQL Istanbul guard returns HTTP 400 on create and date-changing update. The tests verify neither rejected operation persists a change.
 
 On a disposable fixture of 500 projects and 30,000 development sessions, PostgreSQL selected the project order index, the all-session date order index, and the project-scoped session index for date-filtered history and project-reference lookup. Package acceptance remains subject to independent review. [Backend CI configuration](../.github/workflows/backend-ci.yml)
+
+## Package 02 verification
+
+On 2026-11-26, locked frontend and backend installs passed on Node 26.13.1. Frontend lint, strict type-checking, eight unit tests, and the production build passed. Backend Prisma validation, type-checking, 12 regular tests, 26 database tests, and the production build also passed. Both npm audits reported zero known vulnerabilities.
+
+Six Chromium journeys ran against the compiled frontend and backend with a freshly migrated PostgreSQL 18.4 database. They verified sign-in and restoration, revocation and logout, CSRF rejection and recovery after session rotation, project and session CRUD, validation, deletion confirmation and constraints, date and project filters, pagination and back navigation, and recovery from read errors. The primary views fit a 320 CSS pixel viewport, keyboard checks passed, and the browser reported zero unexpected console errors. The development proxy separately passed real health and sign-in smoke checks.
+
+Hosted HTTPS and cross-browser verification remain for later packages. [Frontend CI configuration](../.github/workflows/frontend-ci.yml) · [Package 02 specification](../specs/002-complete-frontend/spec.md)

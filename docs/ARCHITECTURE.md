@@ -36,3 +36,9 @@ These are implementation decisions for Package 01.
 Express app construction remains separate from server startup. Startup validates configuration and checks PostgreSQL connectivity. Routing and transport policy are in the controller and middleware modules. Date policy and persistence are in the domain modules.
 
 Owner provisioning stores an Argon2id hash. Express sessions use the PostgreSQL store through connect-pg-simple, with a fixed expiry and periodic cleanup. The login route limits repeated credential attempts. Expected errors use the canonical JSON envelope. Unexpected errors log a fixed message without request data, credentials, session contents or raw database errors. [API contract](API.md) · [Verification](ROADMAP.md#package-01-verification)
+
+## Implemented frontend
+
+React Router protects the workspace until `GET /auth/me` resolves. Redux Toolkit holds session state in page memory with Redux DevTools disabled. The browser manages the HttpOnly cookie. Axios sends relative `/api/v1` requests and supplies the session-bound token on writes. A protected request that reports an ended session returns the owner to sign-in. A write rejected for a stale CSRF token can look up the current session and retry once.
+
+Project and session data stay in the routes that use them. Vite proxies the API to loopback in development, and history routes use the same paginated list endpoint. The URL keeps applied filters and offsets so the owner can reload or navigate back to a review. [Frontend contract](../specs/002-complete-frontend/contracts/frontend.md) · [Local setup](../README.md#frontend-setup-and-development)

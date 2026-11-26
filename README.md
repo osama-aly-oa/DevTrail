@@ -2,7 +2,7 @@
 
 DevTrail is a Developer Journey and Engineering Reflection Platform for recording development work, lessons learned, technical difficulties, and next steps across software projects.
 
-The Backend Core provides owner authentication, projects and development sessions. The frontend is a placeholder. [Delivery status and verification](docs/ROADMAP.md)
+The private workspace includes owner sign-in, projects, development sessions, Daily Timeline, and Project Journey Review. [Delivery status and verification](docs/ROADMAP.md)
 
 ## Backend setup and development
 
@@ -22,6 +22,39 @@ npm run dev
 ```
 
 At the default port, `GET http://localhost:3000/api/v1/health` returns HTTP 200 with `{"status":"ok"}`. Backend startup requires database connectivity. Use `npm run build` followed by `npm start` to run the compiled server.
+
+## Frontend setup and development
+
+Set `APP_ORIGIN=http://127.0.0.1:5173` in the backend environment before starting it. Start the backend as above, then run these commands from `frontend/` in a second terminal.
+
+```sh
+npm ci
+npm run dev
+```
+
+Open `http://127.0.0.1:5173` and sign in with the provisioned owner. Vite forwards `/api` to port 3000 on loopback without changing the browser origin. Set the frontend process variable `DEVTRAIL_API_PORT` if the backend uses a different port. Use the same host and port in the browser and `APP_ORIGIN`.
+
+The build emits static files to `frontend/dist/`. A deployed host needs to serve those files and the REST API from the same HTTPS origin. Serve the SPA entry point for client-side routes while forwarding `/api/*` to Express. [Architecture](docs/ARCHITECTURE.md#implemented-frontend)
+
+## Frontend verification
+
+From `frontend/` run:
+
+```sh
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+For browser verification, prepare a dedicated PostgreSQL database named `devtrail_test_*` with the backend migration and owner seed commands. Use fixture credentials and run `npm run build` in both packages. Supply `E2E_DATABASE_URL`, `E2E_OWNER_USERNAME`, and `E2E_OWNER_PASSWORD` through the frontend test process environment. The suite creates fixture project and session rows and exercises deletion against its own fixtures. The test runner starts the compiled backend on loopback port 3102 and Vite preview on port 5174.
+
+```sh
+npx playwright install chromium
+npm run test:e2e
+```
+
+Set `E2E_CHROMIUM_PATH` to use an installed Chromium-based browser. [Frontend CI](.github/workflows/frontend-ci.yml) runs the static checks, build, and browser suite against PostgreSQL 18.
 
 ## Testing and build
 
