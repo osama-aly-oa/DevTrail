@@ -62,6 +62,25 @@ Set `TEST_DATABASE_URL` to a dedicated `devtrail_test_*` database, separate from
 
 For browser tests, migrate and seed a dedicated `devtrail_test_*` database with fixture credentials. Build both packages, provide `E2E_DATABASE_URL`, `E2E_OWNER_USERNAME`, and `E2E_OWNER_PASSWORD`, then run `npx playwright install chromium` and `npm run test:e2e` from `frontend/`. Set `E2E_CHROMIUM_PATH` to use an installed Chromium browser and `E2E_CAPTURE=1` to save screenshots in `frontend/test-results/`. The suite starts the API on port 3102 and Vite preview on port 5174. Override the defaults with `E2E_API_PORT` and `E2E_BROWSER_PORT`. [Local verification and release status](docs/ROADMAP.md)
 
+## Spec-driven development
+
+The [DevTrail Constitution](.specify/memory/constitution.md) governs feature work and
+material changes. Humans own requirements, specifications, architecture, technical
+planning, and acceptance criteria. AI agents assist throughout the process and
+primarily implement and verify approved decisions. [Engineering instructions](AGENTS.md)
+
+1. In Spec Kit, document the outcome, compatibility boundaries, acceptance criteria,
+   and applicable test requirements in the feature specification. Obtain explicit
+   human approval of the specification before advancing.
+2. If open questions require clarification, obtain explicit human approval of the
+   clarification artifacts before planning.
+3. In the plan's Constitution Check, explain how the design preserves useful
+   functionality, visual quality, usability, and product value where applicable.
+   Identify reused components, justify new abstractions and dependencies through
+   concrete requirements, and include verification commands. Obtain explicit human
+   approval of the planning artifacts before generating tasks.
+4. Generate tasks from the approved plan. Implement and verify the approved decisions.
+
 ## Production
 
 Build both packages. From `backend/` apply pending migrations, provision the owner if needed, and run `npm start`. Serve `frontend/dist/` and the Express API under the same HTTPS origin. Forward `/api/*` to Express and serve the SPA entry point for browser routes. Set `APP_ORIGIN` to that origin and `TRUSTED_PROXY_IPS` to the explicitly trusted proxy addresses when terminating TLS upstream. `GET /api/v1/health` provides HTTP liveness.
