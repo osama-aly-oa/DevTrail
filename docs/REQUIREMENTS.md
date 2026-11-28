@@ -15,6 +15,8 @@ The table and business rules below describe the behavior preserved in the V2 bas
 | Insights and reflection | Manually written observations, retrospectives, engineering questions, personal answers, and review notes with optional links to related sessions |
 | Reports and tools | Manually written reports or editable summaries from stored records, Markdown export, browser Print/Save as PDF, GitHub sync, grouped search, and workspace settings |
 
+<a name="business-rules"></a>
+
 ## Baseline business rules
 
 - Projects have case-insensitively unique names. Their statuses are Planned, Active, On Hold, Completed, and Archived.
@@ -24,5 +26,9 @@ The table and business rules below describe the behavior preserved in the V2 bas
 - Milestone progress counts expressly completed milestones and completion criteria recorded by the owner. Challenge records can link to multiple sessions.
 - GitHub connections are one per project and one per repository. Imported activity retains its source identity and can be linked to sessions in that project.
 - Projects with development sessions, milestones, or challenges are protected from deletion. Destructive workspace actions require confirmation in the interface.
+
+## Approved domain model
+
+The original MVP model included a project with a name, optional description, and creation and update timestamps. A development session included a project, date, work summary, optional focus, learning notes, difficulties and next steps, and creation and update timestamps. V2 extends those records with the fields described in the API contract.
 
 [API contracts](API.md) · [Release verification and limitations](ROADMAP.md)

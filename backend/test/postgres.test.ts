@@ -69,6 +69,13 @@ async function project(name: string) {
 
 const draft = { sessionDate: '2024-02-29', workSummary: 'Implemented a small refactor.' };
 
+function migrate(url: URL) {
+  const migration = spawnSync(process.execPath, [resolve('node_modules/prisma/build/index.js'), 'migrate', 'deploy'], {
+    env: { ...process.env, DATABASE_URL: url.href }, encoding: 'utf8', timeout: 30_000,
+  });
+  if (migration.status !== 0) throw new Error('Migrations failed in the PostgreSQL integration schema.');
+}
+
 beforeAll(async () => {
   const { url } = parseDatabaseUrl(process.env.TEST_DATABASE_URL);
   if (!/^\/devtrail_test_[a-z0-9_]+$/.test(url.pathname) || url.searchParams.has('schema') || url.searchParams.has('options')) {
@@ -85,10 +92,7 @@ beforeAll(async () => {
   schemaCreated = true;
   url.searchParams.set('schema', schema);
 
-  const migration = spawnSync(process.execPath, [resolve('node_modules/prisma/build/index.js'), 'migrate', 'deploy'], {
-    env: { ...process.env, DATABASE_URL: url.href }, encoding: 'utf8', timeout: 30_000,
-  });
-  if (migration.status !== 0) throw new Error('Migrations failed in the fresh PostgreSQL integration schema.');
+  migrate(url);
 
   config = readConfig({ APP_ORIGIN: localOrigin, DATABASE_URL: url.href, SESSION_SECRET: sessionSecret, NODE_ENV: 'test' });
   database = createDatabase(config.database);
@@ -282,6 +286,36 @@ describe('PostgreSQL migrations and constraints', () => {
 });
 
 describe('owner authentication', () => {
+  it('retains migrations, the owner and an active session after deployment and restart', async () => {
+    const firstDatabase = createDatabase(config.database);
+    const firstApp = createApp(config, firstDatabase);
+    let initial: Awaited<ReturnType<typeof login>>;
+    try {
+      initial = await login(firstApp.app);
+    } finally {
+      try {
+        await firstApp.close();
+      } finally {
+        await firstDatabase.close();
+      }
+    }
+
+    migrate(config.database.url);
+    const { cookie, response } = initial;
+    const reopenedDatabase = createDatabase(config.database);
+    const reopened = createApp(config, reopenedDatabase);
+    try {
+      await request(reopened.app).get(base + '/auth/me').set('Cookie', cookie).expect(200, response.body);
+      await login(reopened.app);
+    } finally {
+      try {
+        await reopened.close();
+      } finally {
+        await reopenedDatabase.close();
+      }
+    }
+  }, 35_000);
+
   it('protects product routes and returns the same generic error for an invalid username or password', async () => {
     for (const path of ['/auth/me', '/projects', '/sessions']) {
       await request(application.app).get(base + path).expect(401).expect('Cache-Control', 'no-store');
@@ -612,12 +646,17 @@ describe('Development Sessions API', () => {
       vi.setSystemTime(new Date('2025-02-11T20:59:59.999Z'));
       await create('2025-02-12').expect(400);
       vi.setSystemTime(new Date('2025-02-11T21:00:00.000Z'));
-      await create('2025-02-12').expect(201);
+      const original = await create('2025-02-12').expect(201);
+      const path = base + '/sessions/' + original.body.data.id;
       vi.setSystemTime(new Date(tomorrow + 'T12:00:00Z'));
-      const rejected = await create(tomorrow).expect(400);
-      expect(rejected.body).toEqual({
+      const expected = {
         error: { code: 'CONSTRAINT_VIOLATION', message: 'The data does not satisfy a database constraint.' },
-      });
+      };
+      await create(tomorrow).expect(400, expected);
+      await request(application.app).patch(path).set(asOwner())
+        .send({ sessionDate: tomorrow, workSummary: 'Rejected change' }).expect(400, expected);
+      await request(application.app).get(path).set(asOwner()).expect(200, original.body);
+      expect(await database.prisma.developmentSession.count({ where: { projectId: BigInt(projectId) } })).toBe(1);
     } finally {
       vi.useRealTimers();
     }

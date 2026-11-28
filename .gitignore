@@ -19,3 +19,6 @@ backend/src/generated/
 # Operating system
 .DS_Store
 Thumbs.db
+
+# Spec Kit Python bytecode
+/.specify/**/__pycache__/

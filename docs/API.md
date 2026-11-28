@@ -2,6 +2,9 @@
 
 All endpoints use `/api/v1`. `GET /health` is public and returns HTTP 200 with `{"status":"ok"}`. Product routes require a valid owner session and return `Cache-Control: no-store`.
 
+<a name="implemented-contracts"></a>
+<a name="approved-conventions"></a>
+
 ## Common contracts
 
 - Resources return `{"data":{...}}`. Collections return `{"data":[...],"pagination":{"offset":0,"limit":20,"hasMore":false}}` unless specified below. Mutations that delete successfully return HTTP 204 with an empty body.
@@ -9,6 +12,9 @@ All endpoints use `/api/v1`. `GET /health` is public and returns HTTP 200 with `
 - Pagination defaults to `offset=0` and `limit=20`. The maximum offset is 2,147,483,647 and maximum limit is 100. Unknown fields, unknown query parameters, and repeated query values are rejected by endpoints with strict schemas.
 - JSON writes require `Content-Type: application/json` and at most 256 KiB. Routes without bodies reject request bodies. Empty optional text is normalized to null. Omitted patch fields are retained.
 - Errors use `{"error":{"code":"CODE","message":"Human-readable message."}}`. Common responses include 400 invalid input, 401 unauthenticated, 403 rejected origin or CSRF, 404 missing resource, 409 conflicts, 413 oversized body, 415 unsupported media, 429 rate limited, and a generic 500 response.
+- Unmatched routes use `NOT_FOUND`. Unexpected errors use `INTERNAL_SERVER_ERROR`. A future session date rejected by the application uses `INVALID_INPUT`. A date rejected by the database guard uses `CONSTRAINT_VIOLATION`.
+
+<a name="approved-mvp-routes"></a>
 
 ## Authentication
 
@@ -19,6 +25,8 @@ All endpoints use `/api/v1`. `GET /health` is public and returns HTTP 200 with `
 | `POST /auth/logout` | Revokes the current session and clears the cookie. Returns 204. |
 
 Login and session lookup return `{data:{owner:{username},csrfToken,expiresAt}}`. All writes require a matching `Origin`, with the origin of `Referer` as fallback when `Origin` is absent. Authenticated writes, including a login replacing an active session, require `X-CSRF-Token`. The cookie is named `__Host-devtrail.sid` over HTTPS or `devtrail.sid` for local loopback HTTP. [Session security](ARCHITECTURE.md#authentication-and-request-protection)
+
+Login accepts usernames of 1–64 ASCII characters, starting with a letter or digit and allowing underscores, dots, and hyphens after the first character. Login passwords accept 1–256 Unicode code points. [Owner provisioning limits](../README.md#local-setup)
 
 ## Projects and sessions
 

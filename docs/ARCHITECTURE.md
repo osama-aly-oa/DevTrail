@@ -8,11 +8,16 @@ The Vite frontend uses React, TypeScript, Tailwind CSS, React Router, Axios, and
 
 Frontend and API share a browser origin. Vite proxies API requests in development. In production the host serves the frontend assets and forwards `/api/*` to Express under the same HTTPS origin. [Local and production setup](../README.md)
 
+<a name="approved-authentication-design"></a>
+<a name="selected-session-and-csrf-settings"></a>
+
 ## Authentication and request protection
 
-The PostgreSQL-backed owner session expires seven days after login. Logins regenerate the session ID, and logout destroys its server-side record. Provisioning stores an Argon2id password hash. The session cookie is host-only, HTTP-only, `SameSite=Lax`, and `Secure` on HTTPS. Local loopback HTTP is permitted in development and tests. TLS termination requires explicit trusted proxy configuration.
+The PostgreSQL-backed owner session expires seven days after login. The server and cookie enforce the same deadline, and the session store periodically prunes expired rows. Logins regenerate the session ID, and logout destroys its server-side record and clears the cookie. Provisioning stores an Argon2id password hash. The session cookie is host-only, HTTP-only, `SameSite=Lax`, uses `Path=/`, and sets `Secure` on HTTPS. Local loopback HTTP is permitted in development and tests. TLS termination requires explicit trusted proxy configuration.
 
 Protected routes require an active owner session. Writes validate the browser `Origin` or the origin of `Referer` when `Origin` is absent. Authenticated writes also require the session-bound `X-CSRF-Token` header. Login is rate-limited and returns generic invalid-credential errors. A frontend request rejected for a rotated CSRF token can obtain the new owner session and retry once.
+
+React Router waits for `GET /auth/me` before opening the workspace. Redux Toolkit keeps session state in page memory with DevTools disabled. The browser manages the session cookie, and an ended session returns the owner to sign-in.
 
 The Markdown renderer escapes content and validates supported link protocols. Attachments are authenticated downloads with type and size checks, `Content-Disposition: attachment`, `nosniff`, and a sandbox policy. File signatures validate the declared image and PDF types.
 

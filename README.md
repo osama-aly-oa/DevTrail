@@ -10,6 +10,8 @@ DevTrail is a private developer growth workspace. Record development sessions, f
 
 The monorepo uses React, TypeScript, Vite, Tailwind CSS, React Router, Axios, and Redux Toolkit on the frontend. The backend uses Node.js, Express, TypeScript, Zod, Prisma, and PostgreSQL. The single owner signs in with a PostgreSQL-backed server session. [Architecture](docs/ARCHITECTURE.md)
 
+<a name="backend-setup-and-development"></a>
+
 ## Local setup
 
 Use Node.js 26.13.1, npm 10.8.3, and PostgreSQL 18 with UTF-8 and ICU support. Create a local database and role, then copy [the environment example](backend/.env.example) to `backend/.env` and set the following values there.
@@ -31,6 +33,8 @@ npm run db:seed
 npm run dev
 ```
 
+<a name="frontend-setup-and-development"></a>
+
 In a second terminal, run from `frontend/`.
 
 ```sh
@@ -46,6 +50,9 @@ For an existing database, run `npm run db:status` and `npm run db:migrate` from 
 
 Connect a GitHub repository to a project in **GitHub**, then select **Sync now**. Public repositories work without a token. For an authorized private repository, set `GITHUB_TOKEN` on the backend to a fine-grained token with read access to Contents and Pull requests on the selected repositories. Synchronization imports up to 90 default-branch commits and 90 recently updated pull requests per refresh. The GitHub token stays in backend configuration. [GitHub REST API documentation](https://docs.github.com/en/rest)
 
+<a name="frontend-verification"></a>
+<a name="testing-and-build"></a>
+
 ## Verification
 
 Run the backend checks from `backend/` and frontend checks from `frontend/`.
@@ -58,6 +65,8 @@ Run the backend checks from `backend/` and frontend checks from `frontend/`.
 | `npm run test:db` | `npm run test:e2e` |
 | `npm run build` | `npm run build` |
 
+GitHub Actions runs these checks on pull requests targeting `main` and on pushes to `main`, using PostgreSQL 18. [Backend CI](.github/workflows/backend-ci.yml) · [Frontend CI](.github/workflows/frontend-ci.yml)
+
 Set `TEST_DATABASE_URL` to a dedicated `devtrail_test_*` database, separate from the application database. The PostgreSQL suite applies both migrations in an isolated fixture schema and cleans up that schema when finished.
 
 For browser tests, migrate and seed a dedicated `devtrail_test_*` database with fixture credentials. Build both packages, provide `E2E_DATABASE_URL`, `E2E_OWNER_USERNAME`, and `E2E_OWNER_PASSWORD`, then run `npx playwright install chromium` and `npm run test:e2e` from `frontend/`. Set `E2E_CHROMIUM_PATH` to use an installed Chromium browser and `E2E_CAPTURE=1` to save screenshots in `frontend/test-results/`. The suite starts the API on port 3102 and Vite preview on port 5174. Override the defaults with `E2E_API_PORT` and `E2E_BROWSER_PORT`. [Local verification and release status](docs/ROADMAP.md)
@@ -68,6 +77,8 @@ The [DevTrail Constitution](.specify/memory/constitution.md) governs feature wor
 material changes. Humans own requirements, specifications, architecture, technical
 planning, and acceptance criteria. AI agents assist throughout the process and
 primarily implement and verify approved decisions. [Engineering instructions](AGENTS.md)
+
+Use Python 3.11 or newer as `python` with the checked-in skills. For Spec Kit CLI maintenance, install the pinned release with `python -m pip install specify-cli==1.4.5` in an isolated Python environment and confirm it with `specify version`. [Upstream license](.specify/LICENSE)
 
 1. In Spec Kit, document the outcome, compatibility boundaries, acceptance criteria,
    and applicable test requirements in the feature specification. Obtain explicit
