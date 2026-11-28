@@ -1,0 +1,250 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "ts"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Project {
+  id               BigInt               @id @default(autoincrement())
+  name             String
+  description      String?
+  status           String               @default("active")
+  repositoryUrl    String?
+  technologies     String[]             @default([])
+  createdAt        DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime             @default(now()) @updatedAt @db.Timestamptz(3)
+  sessions         DevelopmentSession[]
+  milestones       Milestone[]
+  challenges       Challenge[]
+  learningGoals    LearningGoal[]
+  reports          Report[]
+  insights         Insight[]
+  reflections      Reflection[]
+  githubRepository GithubRepository?
+
+  @@index([createdAt(sort: Desc), id(sort: Desc)], map: "project_order_idx")
+  @@map("project")
+}
+
+model DevelopmentSession {
+  id              BigInt              @id @default(autoincrement())
+  projectId       BigInt
+  project         Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  sessionDate     DateTime            @db.Date
+  workSummary     String
+  title           String?
+  durationMinutes Int?
+  status          String              @default("final")
+  workFocus       String?
+  learningNotes   String?
+  difficulties    String?
+  solutions       String?
+  nextSteps       String?
+  technologies    String[]            @default([])
+  tags            String[]            @default([])
+  categories      String[]            @default([])
+  references      String[]            @default([])
+  createdAt       DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime            @default(now()) @updatedAt @db.Timestamptz(3)
+  attachments     SessionAttachment[]
+  milestones      Milestone[]         @relation("MilestoneSessions")
+  challenges      Challenge[]         @relation("ChallengeSessions")
+  learningGoals   LearningGoal[]      @relation("LearningGoalSessions")
+  insights        Insight[]           @relation("InsightSessions")
+  reflections     Reflection[]        @relation("ReflectionSessions")
+  githubLinks     GithubSessionLink[]
+
+  @@index([sessionDate(sort: Desc), createdAt(sort: Desc), id(sort: Desc)], map: "development_session_order_idx")
+  @@index([projectId, sessionDate(sort: Desc), createdAt(sort: Desc), id(sort: Desc)], map: "development_session_project_order_idx")
+  @@map("development_session")
+}
+
+model SessionAttachment {
+  id        BigInt             @id @default(autoincrement())
+  sessionId BigInt
+  session   DevelopmentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: Restrict)
+  name      String
+  mediaType String
+  size      Int
+  content   Bytes
+  createdAt DateTime           @default(now()) @db.Timestamptz(3)
+
+  @@index([sessionId, id])
+  @@map("session_attachment")
+}
+
+model Milestone {
+  id            BigInt               @id @default(autoincrement())
+  projectId     BigInt
+  project       Project              @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  title         String
+  description   String?
+  targetDate    DateTime?            @db.Date
+  status        String               @default("planned")
+  completedDate DateTime?            @db.Date
+  criteria      String?
+  createdAt     DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime             @default(now()) @updatedAt @db.Timestamptz(3)
+  sessions      DevelopmentSession[] @relation("MilestoneSessions")
+
+  @@index([projectId, targetDate])
+  @@map("milestone")
+}
+
+model Challenge {
+  id            BigInt               @id @default(autoincrement())
+  projectId     BigInt
+  project       Project              @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  title         String
+  description   String
+  rootCause     String?
+  investigation String?
+  solution      String?
+  lessons       String?
+  status        String               @default("open")
+  resolvedDate  DateTime?            @db.Date
+  technologies  String[]             @default([])
+  tags          String[]             @default([])
+  references    String[]             @default([])
+  createdAt     DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime             @default(now()) @updatedAt @db.Timestamptz(3)
+  sessions      DevelopmentSession[] @relation("ChallengeSessions")
+
+  @@unique([projectId, title])
+  @@index([resolvedDate])
+  @@map("challenge")
+}
+
+model LearningGoal {
+  id            BigInt               @id @default(autoincrement())
+  projectId     BigInt?
+  project       Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull, onUpdate: Restrict)
+  technology    String
+  title         String
+  notes         String?
+  evidence      String[]             @default([])
+  understanding String?
+  status        String               @default("planned")
+  targetDate    DateTime?            @db.Date
+  createdAt     DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime             @default(now()) @updatedAt @db.Timestamptz(3)
+  sessions      DevelopmentSession[] @relation("LearningGoalSessions")
+
+  @@index([projectId])
+  @@map("learning_goal")
+}
+
+model Report {
+  id        BigInt    @id @default(autoincrement())
+  projectId BigInt?
+  project   Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull, onUpdate: Restrict)
+  title     String
+  kind      String
+  content   String
+  from      DateTime? @db.Date
+  to        DateTime? @db.Date
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @default(now()) @updatedAt @db.Timestamptz(3)
+
+  @@index([projectId])
+  @@map("report")
+}
+
+model Insight {
+  id        BigInt               @id @default(autoincrement())
+  projectId BigInt?
+  project   Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull, onUpdate: Restrict)
+  title     String
+  kind      String
+  content   String
+  createdAt DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime             @default(now()) @updatedAt @db.Timestamptz(3)
+  sessions  DevelopmentSession[] @relation("InsightSessions")
+
+  @@index([projectId])
+  @@map("insight")
+}
+
+model Reflection {
+  id        BigInt               @id @default(autoincrement())
+  projectId BigInt?
+  project   Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull, onUpdate: Restrict)
+  question  String
+  answer    String
+  feedback  String?
+  createdAt DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime             @default(now()) @updatedAt @db.Timestamptz(3)
+  sessions  DevelopmentSession[] @relation("ReflectionSessions")
+
+  @@index([projectId])
+  @@map("reflection")
+}
+
+model GithubRepository {
+  projectId     BigInt           @id
+  project       Project          @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: Restrict)
+  owner         String
+  name          String
+  defaultBranch String?
+  description   String?
+  isPrivate     Boolean?
+  lastSyncAt    DateTime?        @db.Timestamptz(3)
+  syncStatus    String           @default("idle")
+  syncMessage   String?
+  syncStartedAt DateTime?        @db.Timestamptz(3)
+  activities    GithubActivity[]
+
+  @@map("github_repository")
+}
+
+model GithubActivity {
+  id         BigInt              @id @default(autoincrement())
+  projectId  BigInt
+  repository GithubRepository    @relation(fields: [projectId], references: [projectId], onDelete: Cascade, onUpdate: Restrict)
+  kind       String
+  externalId String
+  title      String
+  url        String
+  author     String?
+  occurredAt DateTime            @db.Timestamptz(3)
+  details    String?
+  sessions   GithubSessionLink[]
+
+  @@unique([projectId, kind, externalId])
+  @@index([projectId, occurredAt(sort: Desc), id(sort: Desc)], map: "github_activity_project_order_idx")
+  @@index([occurredAt])
+  @@map("github_activity")
+}
+
+model GithubSessionLink {
+  sessionId  BigInt
+  session    DevelopmentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: Restrict)
+  activityId BigInt
+  activity   GithubActivity     @relation(fields: [activityId], references: [id], onDelete: Cascade, onUpdate: Restrict)
+
+  @@id([sessionId, activityId])
+  @@index([activityId])
+  @@map("github_session_link")
+}
+
+model Owner {
+  id           Int    @id @default(1) @db.SmallInt
+  username     String
+  passwordHash String
+
+  @@map("owner_account")
+}
+
+model HttpSession {
+  sid    String   @id
+  sess   Json     @db.Json
+  expire DateTime @db.Timestamptz(3)
+
+  @@index([expire], map: "http_session_expire_idx")
+  @@map("http_session")
+}
