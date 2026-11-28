@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import * as argon2 from 'argon2';
 import cookieSignature from 'cookie-signature';
@@ -69,10 +70,10 @@ async function project(name: string) {
 const draft = { sessionDate: '2024-02-29', workSummary: 'Implemented a small refactor.' };
 
 function migrate(url: URL) {
-  const result = spawnSync(process.execPath, [resolve('node_modules/prisma/build/index.js'), 'migrate', 'deploy'], {
+  const migration = spawnSync(process.execPath, [resolve('node_modules/prisma/build/index.js'), 'migrate', 'deploy'], {
     env: { ...process.env, DATABASE_URL: url.href }, encoding: 'utf8', timeout: 30_000,
   });
-  if (result.status !== 0) throw new Error('Migrations failed in the PostgreSQL integration schema.');
+  if (migration.status !== 0) throw new Error('Migrations failed in the PostgreSQL integration schema.');
 }
 
 beforeAll(async () => {
@@ -117,12 +118,55 @@ afterAll(async () => {
 }, 15_000);
 
 describe('PostgreSQL migrations and constraints', () => {
+  it('upgrades existing owner, project, and session rows in place', async () => {
+    const upgradeSchema = 'upgrade_' + randomUUID().replaceAll('-', '');
+    const connection = await database.pool.connect();
+    let created = false;
+    try {
+      await connection.query('CREATE SCHEMA "' + upgradeSchema + '"');
+      created = true;
+      await connection.query('SET search_path TO "' + upgradeSchema + '"');
+      const migration = (name: string) => readFileSync(new URL('../prisma/migrations/' + name + '/migration.sql', import.meta.url), 'utf8');
+      await connection.query(migration('20261126000000_backend_core'));
+      await connection.query("INSERT INTO owner_account (username, \"passwordHash\") VALUES ('legacy-owner', '$argon2id$fixture')");
+      const project = await connection.query("INSERT INTO project (name) VALUES ('Legacy Project') RETURNING id");
+      const session = await connection.query(
+        'INSERT INTO development_session ("projectId", "sessionDate", "workSummary") VALUES ($1, $2, $3) RETURNING id',
+        [project.rows[0].id, '2024-03-18', 'Legacy work'],
+      );
+      await connection.query(migration('20261127000000_developer_growth'));
+      expect((await connection.query('SELECT username FROM owner_account')).rows).toEqual([{ username: 'legacy-owner' }]);
+      expect((await connection.query('SELECT id, name, status, technologies FROM project')).rows).toEqual([
+        { id: project.rows[0].id, name: 'Legacy Project', status: 'active', technologies: [] },
+      ]);
+      expect((await connection.query(
+        'SELECT id, "projectId", "sessionDate"::text, "workSummary", status, title, "durationMinutes" FROM development_session',
+      )).rows).toEqual([{
+        id: session.rows[0].id, projectId: project.rows[0].id, sessionDate: '2024-03-18', workSummary: 'Legacy work',
+        status: 'final', title: null, durationMinutes: null,
+      }]);
+    } finally {
+      try {
+        if (created) {
+          await connection.query('ROLLBACK');
+          await connection.query('RESET search_path');
+          await connection.query('DROP SCHEMA "' + upgradeSchema + '" CASCADE');
+        }
+      } finally {
+        connection.release();
+      }
+    }
+  });
+
   it('records the clean migration and creates typed columns and identity keys', async () => {
-    const result = await database.pool.query('SELECT migration_name, finished_at FROM ' + table('_prisma_migrations'));
-    expect(result.rows).toEqual([{ migration_name: '20261126000000_backend_core', finished_at: expect.any(Date) }]);
+    const result = await database.pool.query('SELECT migration_name, finished_at FROM ' + table('_prisma_migrations') + ' ORDER BY migration_name');
+    expect(result.rows).toEqual([
+      { migration_name: '20261126000000_backend_core', finished_at: expect.any(Date) },
+      { migration_name: '20261127000000_developer_growth', finished_at: expect.any(Date) },
+    ]);
     const columns = await database.pool.query(
       'SELECT table_name, column_name, data_type, identity_generation FROM information_schema.columns ' +
-      "WHERE table_schema = $1 AND table_name <> '_prisma_migrations' " +
+      "WHERE table_schema = $1 AND table_name IN ('development_session', 'owner_account', 'project') " +
       'AND column_name IN ($2, $3, $4) ORDER BY table_name, column_name',
       [schema, 'id', 'sessionDate', 'createdAt'],
     );
@@ -271,6 +315,7 @@ describe('owner authentication', () => {
       }
     }
   }, 35_000);
+
   it('protects product routes and returns the same generic error for an invalid username or password', async () => {
     for (const path of ['/auth/me', '/projects', '/sessions']) {
       await request(application.app).get(base + path).expect(401).expect('Cache-Control', 'no-store');
@@ -450,6 +495,7 @@ describe('Projects API', () => {
     expect(created.headers.location).toBe(path);
     expect(data).toEqual({
       id: expect.stringMatching(/^[1-9]\d*$/), name: 'API CRUD', description: null,
+      status: 'active', repositoryUrl: null, technologies: [],
       createdAt: expect.any(String), updatedAt: expect.any(String),
     });
     await request(application.app).get(path).set(asOwner()).expect(200, { data });
@@ -543,7 +589,9 @@ describe('Development Sessions API', () => {
     expect(created.headers.location).toBe(path);
     expect(data).toEqual({
       ...draft, id: expect.stringMatching(/^[1-9]\d*$/), projectId: source, workFocus: 'focus',
-      learningNotes: null, difficulties: null, nextSteps: null, createdAt: expect.any(String), updatedAt: expect.any(String),
+      learningNotes: null, difficulties: null, nextSteps: null, solutions: null, title: null, durationMinutes: null,
+      status: 'final', technologies: [], categories: [], tags: [], references: [],
+      createdAt: expect.any(String), updatedAt: expect.any(String),
     });
     const restriction = await request(application.app).delete(base + '/projects/' + source).set(asOwner()).expect(409);
     expect(restriction.body.error.code).toBe('PROJECT_HAS_SESSIONS');
@@ -664,5 +712,206 @@ describe('Development Sessions API', () => {
     expect(response.body.data).toMatchObject({ id: sessionId, projectId });
     const filtered = await request(application.app).get(base + '/sessions?projectId=' + projectId).set(asOwner()).expect(200);
     expect(filtered.body.data.map((row: { id: string }) => row.id)).toEqual([sessionId]);
+  });
+});
+
+describe('Integrations with PostgreSQL and an authenticated owner', () => {
+  it('reports GitHub status to the owner and leaves AI routes unavailable', async () => {
+    await request(application.app).get(base + '/integrations/status').expect(401);
+    const status = await request(application.app).get(base + '/integrations/status').set(asOwner()).expect(200);
+    expect(status.body.data).toEqual({ github: { authenticated: Boolean(config.githubToken) } });
+
+    for (const path of ['/ai/context', '/ai/generate']) {
+      await request(application.app).post(base + path).set(asOwner()).send({}).expect(404);
+    }
+  });
+
+  it('imports without duplicating activity, links same-project sessions, and preserves the last successful sync after failure', async () => {
+    const projectId = await project('GitHub sync fixture');
+    const secondProjectId = await project('GitHub unconnected fixture');
+    const session = await request(application.app).post(base + '/sessions').set(asOwner()).send({ ...draft, projectId }).expect(201);
+    const sessionId = session.body.data.id as string;
+    const sha = 'a'.repeat(40);
+    let rateLimited = false;
+    const fetcher = vi.fn<typeof fetch>(async url => {
+      const path = new URL(String(url)).pathname;
+      if (rateLimited) return Response.json({}, { status: 429, headers: { 'Retry-After': '45' } });
+      if (path.endsWith('/commits')) return Response.json([{
+        sha, commit: { message: 'Add test coverage', committer: { date: '2025-02-03T21:10:00Z' } }, author: null,
+      }]);
+      if (path.endsWith('/pulls')) return Response.json([{
+        number: 7, title: 'Improve reports', state: 'open', created_at: '2025-02-03T18:00:00Z', user: null,
+      }]);
+      return Response.json({ name: 'fixture', owner: { login: 'devtrail' }, default_branch: 'main', description: null, private: false });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    const githubApp = createApp(config, database);
+    const repositoryPath = `${base}/github/repositories/${projectId}`;
+    try {
+      await request(githubApp.app).post(base + '/github/repositories').set(asOwner())
+        .send({ projectId, owner: 'devtrail', name: 'fixture' }).expect(201);
+      const duplicate = await request(githubApp.app).post(base + '/github/repositories').set(asOwner())
+        .send({ projectId: secondProjectId, owner: 'DEVTRAIL', name: 'fixture' }).expect(409);
+      expect(duplicate.body.error.code).toBe('GITHUB_REPOSITORY_IN_USE');
+      const initial = await request(githubApp.app).get(repositoryPath).set(asOwner()).expect(200);
+      expect(initial.body.data).toMatchObject({ projectId, syncStatus: 'idle', lastSyncAt: null });
+      let lastSyncAt: string | undefined;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const synced = await request(githubApp.app).post(`${repositoryPath}/sync`).set(asOwner()).expect(200);
+        expect(synced.body.data).toMatchObject({ syncStatus: 'synced', lastSyncAt: expect.any(String) });
+        lastSyncAt = synced.body.data.lastSyncAt as string;
+      }
+      const all = await request(githubApp.app).get(`${base}/github/activity?projectId=${projectId}`).set(asOwner()).expect(200);
+      expect(all.body.pagination).toEqual({ offset: 0, limit: 20, total: 2, hasMore: false });
+      const commitId = all.body.data[0].id as string;
+      expect(all.body.data[0]).toMatchObject({ kind: 'commit', externalId: sha });
+      await request(githubApp.app).get(`${base}/github/activity/${commitId}`).set(asOwner()).expect(200, { data: all.body.data[0] });
+      const localDay = await request(githubApp.app).get(`${base}/github/activity?projectId=${projectId}&from=2025-02-04&to=2025-02-04`)
+        .set(asOwner()).expect(200);
+      expect(localDay.body.data).toHaveLength(1);
+      expect(localDay.body.data[0].id).toBe(commitId);
+
+      const linkedPath = `${base}/github/sessions/${sessionId}/activity`;
+      const linked = await request(githubApp.app).put(linkedPath).set(asOwner()).send({ activityIds: [commitId, commitId] }).expect(200);
+      expect(linked.body.data).toHaveLength(1);
+      await request(githubApp.app).get(linkedPath).set(asOwner()).expect(200, { data: linked.body.data });
+      await request(githubApp.app).patch(`${base}/sessions/${sessionId}`).set(asOwner()).send({ projectId: secondProjectId }).expect(200);
+      await request(githubApp.app).get(linkedPath).set(asOwner()).expect(200, { data: [] });
+      await request(githubApp.app).put(linkedPath).set(asOwner()).send({ activityIds: [commitId] }).expect(400);
+
+      rateLimited = true;
+      await request(githubApp.app).post(`${repositoryPath}/sync`).set(asOwner()).expect(429).expect('Retry-After', '45');
+      const failure = await request(githubApp.app).get(repositoryPath).set(asOwner()).expect(200);
+      expect(failure.body.data).toMatchObject({ lastSyncAt, syncStatus: 'failed' });
+      await request(githubApp.app).delete(repositoryPath).set(asOwner()).expect(204);
+      await request(githubApp.app).get(repositoryPath).set(asOwner()).expect(200, { data: null });
+    } finally {
+      vi.unstubAllGlobals();
+      await githubApp.close();
+    }
+  });
+});
+
+describe('V2 developer growth workflows', () => {
+  it('stores session drafts and fields, filters them, and requires a summary to finalize', async () => {
+    const projectId = await project('Draft workflow');
+    const draft = await request(application.app).post(base + '/sessions').set(asOwner())
+      .send({
+        projectId, sessionDate: '2025-01-04', status: 'draft', title: 'Inspect asynchronous jobs',
+        durationMinutes: 47, technologies: ['TypeScript', 'typescript', 'PostgreSQL'], categories: ['Learning', 'Testing'],
+        tags: ['Jobs'], references: ['https://example.com/reference'], solutions: 'Use a bounded queue.',
+      }).expect(201);
+    const id = draft.body.data.id;
+    expect(draft.body.data).toMatchObject({
+      status: 'draft', workSummary: '', durationMinutes: 47, technologies: ['TypeScript', 'PostgreSQL'],
+      references: ['https://example.com/reference'], solutions: 'Use a bounded queue.',
+    });
+    const filtered = await request(application.app)
+      .get(base + '/sessions?projectId=' + projectId + '&status=draft&technology=typescript&tag=jobs&category=Learning&q=bounded')
+      .set(asOwner()).expect(200);
+    expect(filtered.body.data.map((row: { id: string }) => row.id)).toEqual([id]);
+    await request(application.app).patch(base + '/sessions/' + id).set(asOwner()).send({ status: 'final' }).expect(400);
+    await request(application.app).patch(base + '/sessions/' + id).set(asOwner())
+      .send({ status: 'final', workSummary: 'Recorded queue behavior.' }).expect(200);
+    await request(application.app).patch(base + '/sessions/' + id).set(asOwner())
+      .send({ references: ['javascript:void(0)'] }).expect(400);
+    const final = await request(application.app).get(base + '/sessions/' + id).set(asOwner()).expect(200);
+    expect(final.body.data).toMatchObject({ status: 'final', workSummary: 'Recorded queue behavior.' });
+  });
+
+  it('round trips a bounded attachment securely and enforces quota on concurrent requests', async () => {
+    const projectId = await project('Attachment workflow');
+    const session = await request(application.app).post(base + '/sessions').set(asOwner()).send({ ...draft, projectId }).expect(201);
+    const path = base + '/sessions/' + session.body.data.id + '/attachments';
+    const file = { name: 'review.md', mediaType: 'text/markdown', content: Buffer.from('# Notes').toString('base64') };
+    await request(application.app).post(path).set(asOwner()).send({ ...file, name: '../review.md' }).expect(400);
+    await request(application.app).post(path).set(asOwner()).send({ ...file, mediaType: 'text/html' }).expect(400);
+    await request(application.app).post(path).set(asOwner()).send({ ...file, mediaType: 'image/png' }).expect(400);
+    const created = await request(application.app).post(path).set(asOwner()).send(file).expect(201);
+    const download = path + '/' + created.body.data.id;
+    expect(created.headers.location).toBe(download);
+    expect(created.body.data).not.toHaveProperty('content');
+    await request(application.app).get(download).expect(401);
+    await request(application.app).get(download).set(asOwner()).expect(200)
+      .expect('Content-Disposition', /^attachment; filename="?review\.md"?$/).expect('X-Content-Type-Options', 'nosniff')
+      .expect('# Notes');
+    const uploads = await Promise.all(Array.from({ length: 5 }, () => request(application.app).post(path).set(asOwner()).send(file)));
+    expect(uploads.map(upload => upload.status).sort()).toEqual([201, 201, 201, 201, 409]);
+    const list = await request(application.app).get(path).set(asOwner()).expect(200);
+    expect(list.body.data).toHaveLength(5);
+    await request(application.app).delete(download).set(asOwner()).expect(204);
+    await request(application.app).get(download).set(asOwner()).expect(404);
+  });
+
+  it('persists linked milestones, challenges, learning goals, reports, insights, and reflections', async () => {
+    const projectId = await project('Growth records 100% reliable');
+    const session = await request(application.app).post(base + '/sessions').set(asOwner()).send({ ...draft, projectId }).expect(201);
+    const sessionId = session.body.data.id as string;
+    const add = (route: string, body: object) => request(application.app).post(base + '/' + route).set(asOwner()).send(body);
+    const milestone = await add('milestones', {
+      projectId, title: 'Ship the release', status: 'completed', completedDate: '2024-03-02', criteria: 'Complete the release.',
+      sessionIds: [sessionId, sessionId],
+    }).expect(201);
+    expect(milestone.body.data).toMatchObject({ projectId, sessionIds: [sessionId], completedDate: '2024-03-02' });
+    await request(application.app).delete(base + '/projects/' + projectId).set(asOwner()).expect(409);
+    const reopened = await request(application.app).patch(milestone.headers.location).set(asOwner()).send({ status: 'active' }).expect(200);
+    expect(reopened.body.data.completedDate).toBeNull();
+    await add('milestones', { projectId, title: 'Missing parent', sessionIds: [missingId] }).expect(404);
+    const challenge = await add('challenges', {
+      projectId, title: 'Crash in async worker', description: 'A timing issue in developer fixtures.',
+      technologies: ['Node.js'], status: 'resolved', solution: 'Use a shared callback.', resolvedDate: '2024-03-02', sessionIds: [sessionId],
+    }).expect(201);
+    expect(challenge.body.data).toMatchObject({ status: 'resolved', resolvedDate: '2024-03-02', sessionIds: [sessionId] });
+    await add('challenges', { projectId, title: 'cRaSH in async worker', description: 'Duplicate' }).expect(409);
+    const goal = await add('learning-goals', {
+      projectId, title: 'Practice Node.js error handling', technology: 'Node.js', understanding: 'practicing', sessionIds: [sessionId],
+    }).expect(201);
+    expect(goal.body.data).toMatchObject({ understanding: 'practicing', sessionIds: [sessionId] });
+    await request(application.app).patch(goal.headers.location).set(asOwner()).send({ sessionIds: [missingId] }).expect(404);
+    const goalAfterRejectedUpdate = await request(application.app).get(goal.headers.location).set(asOwner()).expect(200);
+    expect(goalAfterRejectedUpdate.body.data.sessionIds).toEqual([sessionId]);
+    await add('insights', { projectId, title: 'Worker review', kind: 'project', content: 'Progress on the worker.', sessionIds: [sessionId] }).expect(201);
+    await add('reflections', { projectId, question: 'Why use a bounded queue?', answer: 'Control memory.', sessionIds: [sessionId] }).expect(201);
+    await add('reports', { projectId, title: '100% progress review', kind: 'weekly', content: '# Review', from: '2024-04-04', to: '2024-04-01' }).expect(400);
+    await add('reports', { projectId, title: '100% progress review', kind: 'weekly', content: '# Review', from: '2024-04-01', to: '2024-04-04' }).expect(201);
+    const search = await request(application.app).get(base + '/search').query({ q: '%', projectId }).set(asOwner()).expect(200);
+    expect(search.body.data.projects.map((row: { id: string }) => row.id)).toEqual([projectId]);
+    expect(search.body.data.reports).toHaveLength(1);
+    expect(search.body.data.challenges).toHaveLength(0);
+    const technology = await request(application.app).get(base + '/search')
+      .query({ q: 'node', type: 'technologies', projectId }).set(asOwner()).expect(200);
+    expect(technology.body.data.technologies).toMatchObject([{ title: 'Node.js' }]);
+    await request(application.app).delete(base + '/sessions/' + sessionId).set(asOwner()).expect(204);
+    const remaining = await request(application.app).get(challenge.headers.location).set(asOwner()).expect(200);
+    expect(remaining.body.data.sessionIds).toEqual([]);
+    const restricted = await request(application.app).delete(base + '/projects/' + projectId).set(asOwner()).expect(409);
+    expect(restricted.body.error.code).toBe('PROJECT_HAS_GROWTH_RECORDS');
+  });
+
+  it('calculates period comparisons and time breakdowns from finalized stored sessions', async () => {
+    const projectId = await project('Analytics canonical records');
+    const write = (route: string, data: object) => request(application.app).post(base + '/' + route).set(asOwner())
+      .send({ projectId, ...data }).expect(201);
+    await write('sessions', { ...draft, sessionDate: '2024-01-02', durationMinutes: 30 });
+    await write('sessions', {
+      ...draft, sessionDate: '2024-01-03', durationMinutes: 61, technologies: ['PostgreSQL', 'TypeScript'],
+      categories: ['Learning', 'Testing'],
+    });
+    await write('sessions', { ...draft, sessionDate: '2024-01-04', durationMinutes: null, technologies: ['typescript'] });
+    await write('sessions', { ...draft, sessionDate: '2024-01-04', durationMinutes: 240, status: 'draft' });
+    await write('challenges', { title: 'Issue resolved', description: 'Recorded solution', status: 'resolved', resolvedDate: '2024-01-04' });
+    await write('milestones', { title: ' milestone ', status: 'completed', completedDate: '2024-01-04' });
+    const response = await request(application.app).get(base + '/analytics')
+      .query({ projectId, from: '2024-01-03', to: '2024-01-04' }).set(asOwner()).expect(200);
+    expect(response.body.data).toMatchObject({
+      totals: { sessions: 2, durationMinutes: 61, longestStreak: 2, currentStreak: 0, technologies: 2, challengesSolved: 1 },
+      previous: { sessions: 1, durationMinutes: 30 },
+      days: [{ date: '2024-01-03', sessions: 1, durationMinutes: 61 }, { date: '2024-01-04', sessions: 1, durationMinutes: 0 }],
+      learningDays: [{ date: '2024-01-03', sessions: 1, durationMinutes: 61 }],
+      milestones: { planned: 0, active: 0, completed: 1 },
+      challengeDays: [{ date: '2024-01-04', count: 1 }],
+    });
+    const slices = response.body.data.byTechnology as { durationMinutes: number }[];
+    expect(slices.map(slice => slice.durationMinutes)).toEqual([31, 30]);
   });
 });

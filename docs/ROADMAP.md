@@ -1,59 +1,54 @@
 # DevTrail Roadmap
 
-## Approved milestones
+## Delivery status
 
-| Milestone | Scope | Status |
-| --- | --- | --- |
-| M1 | Project Foundation | F01–F04 are implemented and locally verified on the foundation branch. Backend CI is configured. Formal acceptance is pending. |
-| M2 | Database | Package 01 merged. |
-| M3 | Authentication | Backend merged. Owner sign-in, restoration, and sign-out implemented in Package 02. |
-| M4 | Projects | Backend merged. Project management implemented in Package 02. |
-| M5 | Development Sessions | Backend merged. Session recording and management implemented in Package 02. |
-| M6 | Daily Timeline & Project Journey Review | Package 02 implemented for review. |
-| M7 | Quality, Documentation & Deployment | Packages 03–04 · Pending. Essential CI starts early. |
-
-## M1 foundation evidence
-
-Reviewed `feat/m1-complete-foundation` at `af6c5a8`. The checkout did not contain a standalone prior audit or a formal F01–F04 acceptance checklist. The assessment below uses the source, Git history, the F02 pull request verification checklist, and local checks.
-
-| Task | Evidence and assessment |
+| Package | Status |
 | --- | --- |
-| F01 — Repository and Monorepo Setup | The repository layout and ignore rules are present. `backend/` has an npm manifest and lockfile, and `frontend/` is a tracked placeholder. The monorepo setup is supported by repository inspection. |
-| F02 — Backend Bootstrap | Express 5 and strict TypeScript are configured. App construction and server startup are separate, and startup validates `PORT`. Type-checking, the build, and HTTP health smoke checks against both source and compiled entry points passed, covering the known PR verification checklist. [F02 pull request](https://github.com/osama-aly-oa/DevTrail/pull/1) |
-| F03 — HTTP Error Handling | Integration tests verified JSON 404 responses and generic JSON 500 responses for synchronous throws and rejected promises. The 500 tests also checked server-side logging. |
-| F04 — Testing Foundation | Vitest and Supertest ran the integration suite, and the type-check included test sources. GitHub Actions runs the backend checks for pull requests targeting `main` and pushes to `main`. |
+| 01 · Backend core | PostgreSQL, owner authentication, and project and session management form the V2 base. |
+| 02 · Owner workspace | The existing React sign-in, projects, sessions, and journey views are carried into V2. |
+| V2 · Developer growth | The preserved baseline includes expanded sessions, growth records, analytics, timeline, reports, search, settings, manual authoring, GitHub integration, and the redesigned workspace. |
+| AI-assisted writing | Deferred to a future release. |
+| Production release | Deployment, remote CI verification, and independent review remain pending. |
 
-On 2026-11-26, from `backend/` with Node.js 26.13.1 and npm 10.8.3, `npm ci`, `npm run typecheck`, `npm test`, and `npm run build` all exited successfully. Vitest passed all four tests in one file. HTTP smoke checks against the source and compiled server entry points both returned 200 with `{"status":"ok"}`.
+The V2 baseline was developed on `feat/devtrail-v2` from `e3a7f47` and carries forward the Package 02 frontend from `160af9b`. Individual product requirements and acceptance criteria are subject to human review and approval. [V2 baseline behavior](REQUIREMENTS.md#preserved-v2-baseline-under-review)
 
-The [Backend CI workflow](../.github/workflows/backend-ci.yml) uses Ubuntu and Node.js 26.13.1 to install locked dependencies, type-check, test, and build from `backend/`. The results above are local. GitHub reports CI results on the [foundation pull request](https://github.com/osama-aly-oa/DevTrail/pull/2/checks).
+## Local verification
 
-F03 delegates errors after headers are sent to Express. The current suite covers errors before headers are sent. The 500 tests mount the production handler in an isolated Express fixture. Review error logging when Package 01 introduces request bodies and authentication, since the foundation logs the raw error object.
+The application checks were rerun on 2026-11-28 after resolving the PR #7 merge conflicts. The live public GitHub API result is from earlier V2 verification.
+
+| Check | Evidence |
+| --- | --- |
+| Backend regular checks | 14 automated tests passed. Typechecking, Prisma schema validation, and the production build passed. |
+| PostgreSQL integration | 33 tests passed on PostgreSQL 18 in a dedicated test database. Coverage includes fresh installation, in-place upgrade, session persistence across restart, atomic rejection of future dates, growth records, analytics, and authenticated GitHub routes with mocked upstream responses. The removed AI routes returned 404. |
+| Frontend regular checks | Lint, TypeScript checks, 12 automated tests, and the production build passed. |
+| GitHub | Controlled mocks verified pagination, throttling, deduplication, session linking, and failed refresh behavior. A real read-only public GitHub API check imported 3 commits and 90 pull requests from `octocat/Hello-World` through the client and correctly reported truncated history. |
+| Browser | Eight Chromium journeys passed against PostgreSQL 18. Coverage includes manually saving a session, an insight with linked evidence, and a report from scratch. The existing report builder and Markdown and PDF exports passed. Primary workspace screens were checked at 320 CSS pixels. |
+| CI | Backend and frontend workflows are configured. GitHub records hosted runs on PR #7. |
+
+[Backend workflow](../.github/workflows/backend-ci.yml) · [Frontend workflow](../.github/workflows/frontend-ci.yml) · [PR #7 checks](https://github.com/osama-aly-oa/DevTrail/pull/7/checks)
+
+## Foundation verification
+
+The foundation review at `af6c5a8` checked the repository layout, Express startup, API health, common errors, and test infrastructure. Locked install, typechecking, four backend tests, the build, and HTTP smoke checks passed locally on 2026-11-26. The backend core and owner workspace extended that base with the PostgreSQL and Chromium suites used by V2. Earlier frontend evidence is recorded in `160af9b`.
 
 ## Approved delivery packages
 
-Deliver packages in reviewable increments with automated tests, local verification, and documentation updates.
+Package 01 delivered the PostgreSQL backend for owner authentication, projects, and sessions. Package 02 delivered the owner workspace, Daily Timeline, and Project Journey Review. Package 03 covers engineering quality. Package 04 covers production release. [Package 01 specification](../specs/001-backend-core/spec.md) · [Package 02 specification](../specs/002-complete-frontend/spec.md)
 
-| Package | Scope |
-| --- | --- |
-| 01 — Backend Core | PostgreSQL and Prisma migrations, owner authentication and session management, Projects and Development Sessions APIs, validation and centralized errors, automated backend and database integration tests. Publish the product contracts in the canonical API document. |
-| 02 — Complete Frontend | React application setup, authentication UI, project and development session management, Daily Timeline, Project Journey Review, and backend integration. |
-| 03 — Engineering Quality | Security review, end-to-end tests, bug fixes, performance review, and necessary refactoring. |
-| 04 — Production Release | Production configuration, CI/CD for release, deployment, and final documentation. |
+### Package 01 verification
 
-The foundation includes essential backend CI. Extend it with integration checks as they become available.
+On 2026-11-26, locked installation, Prisma validation, typechecking, 12 regular tests, 26 PostgreSQL integration tests, and the build passed. Clean migration, owner provisioning, health, and sign-in passed for source and compiled entry points. On a fixture of 500 projects and 30,000 sessions, PostgreSQL selected the ordering indexes for project listing, session history, and project-reference lookup.
 
-## Package 01 verification
+### Package 02 verification
 
-On 2026-11-26, Node 26.13.1, npm 10.8.3 and PostgreSQL 18 passed the locked install, Prisma validation, type-check, 12 regular tests, 26 PostgreSQL integration tests and production build. The install audit reported zero known vulnerabilities at the time of verification. Clean migration, owner seed, and HTTP health and login worked against PostgreSQL from both source and compiled entry points.
+On 2026-11-26, locked installs, frontend lint, typechecking, eight frontend unit tests, both builds, and the backend verification suite passed. Six Chromium journeys covered authentication, CSRF recovery, project and session management, history filters and navigation, read-error recovery, and the 320 CSS pixel layout. The development proxy passed health and sign-in smoke checks.
 
-The database suite verifies migration reapplication, persisted sessions across restart, cookie and request protections, authorization failures, sanitized errors, simultaneous writes, and data constraints. A date rejected by the PostgreSQL Istanbul guard returns HTTP 400 on create and date-changing update. The tests verify neither rejected operation persists a change.
+## Release limits and open checks
 
-On a disposable fixture of 500 projects and 30,000 development sessions, PostgreSQL selected the project order index, the all-session date order index, and the project-scoped session index for date-filtered history and project-reference lookup. Package acceptance remains subject to independent review. [Backend CI configuration](../.github/workflows/backend-ci.yml)
+- Verify authorized private GitHub access with owner-supplied server configuration.
+- Run deployment smoke checks with real HTTPS and trusted proxy configuration. Browser PDF output depends on the selected browser and print settings.
+- GitHub synchronization provides a recent activity window, covering the default branch and recently updated pull requests. The repository view explains when older history falls outside that window.
+- Data export is a JSON record snapshot. Attachment binaries are downloaded separately, and complete operational backups remain the database owner's responsibility.
+- Search uses bounded database matching. Analytics are computed for the selected scope from canonical records. Large-dataset query performance remains a deployment check.
 
-## Package 02 verification
-
-On 2026-11-26, locked frontend and backend installs passed on Node 26.13.1. Frontend lint, strict type-checking, eight unit tests, and the production build passed. Backend Prisma validation, type-checking, 12 regular tests, 26 database tests, and the production build also passed. Both npm audits reported zero known vulnerabilities.
-
-Six Chromium journeys ran against the compiled frontend and backend with a freshly migrated PostgreSQL 18.4 database. They verified sign-in and restoration, revocation and logout, CSRF rejection and recovery after session rotation, project and session CRUD, validation, deletion confirmation and constraints, date and project filters, pagination and back navigation, and recovery from read errors. The primary views fit a 320 CSS pixel viewport, keyboard checks passed, and the browser reported zero unexpected console errors. The development proxy separately passed real health and sign-in smoke checks.
-
-Hosted HTTPS and cross-browser verification remain for later packages. [Frontend CI configuration](../.github/workflows/frontend-ci.yml) · [Package 02 specification](../specs/002-complete-frontend/spec.md)
+[Setup and operation](../README.md) · [Requirements](REQUIREMENTS.md)

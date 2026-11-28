@@ -1,18 +1,30 @@
 # DevTrail
 
-DevTrail is a Developer Journey and Engineering Reflection Platform for recording development work, lessons learned, technical difficulties, and next steps across software projects.
+DevTrail is a private developer growth workspace. Record development sessions, follow project milestones, build a technical knowledge base, and review your progress using data from your own work.
 
-The private workspace includes owner sign-in, projects, development sessions, Daily Timeline, and Project Journey Review. [Delivery status and verification](docs/ROADMAP.md)
+- Overview and analytics show recorded time, activity trends, streaks, and recent work.
+- Project workspaces connect sessions, learning, milestones, challenges, and GitHub activity.
+- Write sessions, insights, reflections, and reports manually. Reports can also start from a summary of saved records.
+- Learning goals, technical reflections, and saved reports keep evidence and self-assessment visible.
+- Global search, a command palette, and system, light, and dark themes are available throughout the workspace.
 
-## Backend setup and development
+The monorepo uses React, TypeScript, Vite, Tailwind CSS, React Router, Axios, and Redux Toolkit on the frontend. The backend uses Node.js, Express, TypeScript, Zod, Prisma, and PostgreSQL. The single owner signs in with a PostgreSQL-backed server session. [Architecture](docs/ARCHITECTURE.md)
 
-Use Node.js 26.13.1, npm 10.8.3 and a local PostgreSQL 18 database with UTF-8 and ICU support. From `backend/`, copy `.env.example` to `.env` and fill in the values locally.
+<a name="backend-setup-and-development"></a>
 
-- Set `DATABASE_URL` to a PostgreSQL connection URL for the local database.
-- Set `SESSION_SECRET` to a randomly generated 32-byte secret encoded as 64 hexadecimal characters.
-- Set `OWNER_USERNAME` and `OWNER_PASSWORD` for initial provisioning. Use a nonblank password of 12–256 Unicode code points. Repeating provisioning retains the original password and rejects a different username.
-- For local development, set `APP_ORIGIN` to the actual browser origin. The example uses `http://localhost:3000`. Set `PORT` to the listener port, defaulting to 3000.
-- Deployed browser origins require HTTPS. Set `TRUSTED_PROXY_IPS` only when using an explicitly trusted proxy.
+## Local setup
+
+Use Node.js 26.13.1, npm 10.8.3, and PostgreSQL 18 with UTF-8 and ICU support. Create a local database and role, then copy [the environment example](backend/.env.example) to `backend/.env` and set the following values there.
+
+| Variable | Value |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL connection URL for the local database |
+| `SESSION_SECRET` | 32 random bytes encoded as 64 hexadecimal characters. The environment example includes a generation command. |
+| `APP_ORIGIN` | `http://127.0.0.1:5173` for the default Vite server |
+| `OWNER_USERNAME`, `OWNER_PASSWORD` | Initial owner credentials. Use a nonblank password of 12–256 Unicode code points. |
+| `PORT` | Backend listener port, defaulting to 3000 |
+
+Run from `backend/`. The seed retains the existing owner credentials on repeat runs.
 
 ```sh
 npm ci
@@ -21,83 +33,67 @@ npm run db:seed
 npm run dev
 ```
 
-At the default port, `GET http://localhost:3000/api/v1/health` returns HTTP 200 with `{"status":"ok"}`. Backend startup requires database connectivity. Use `npm run build` followed by `npm start` to run the compiled server.
+<a name="frontend-setup-and-development"></a>
 
-## Frontend setup and development
-
-Set `APP_ORIGIN=http://127.0.0.1:5173` in the backend environment before starting it. Start the backend as above, then run these commands from `frontend/` in a second terminal.
+In a second terminal, run from `frontend/`.
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173` and sign in with the provisioned owner. Vite forwards `/api` to port 3000 on loopback without changing the browser origin. Set the frontend process variable `DEVTRAIL_API_PORT` if the backend uses a different port. Use the same host and port in the browser and `APP_ORIGIN`.
+Open [the local workspace](http://127.0.0.1:5173) and sign in as the provisioned owner. The browser origin must match `APP_ORIGIN` exactly. Vite proxies `/api` to the backend on port 3000. Set the frontend process variable `DEVTRAIL_API_PORT` if you change that port.
 
-The build emits static files to `frontend/dist/`. A deployed host needs to serve those files and the REST API from the same HTTPS origin. Serve the SPA entry point for client-side routes while forwarding `/api/*` to Express. [Architecture](docs/ARCHITECTURE.md#implemented-frontend)
+For an existing database, run `npm run db:status` and `npm run db:migrate` from `backend/` with its existing connection configuration. The V2 migration adds fields and tables and retains existing records. Existing projects default to Active and existing sessions default to Final. [Database design](docs/DATABASE.md)
 
-## Frontend verification
+## GitHub setup
 
-From `frontend/` run:
+Connect a GitHub repository to a project in **GitHub**, then select **Sync now**. Public repositories work without a token. For an authorized private repository, set `GITHUB_TOKEN` on the backend to a fine-grained token with read access to Contents and Pull requests on the selected repositories. Synchronization imports up to 90 default-branch commits and 90 recently updated pull requests per refresh. The GitHub token stays in backend configuration. [GitHub REST API documentation](https://docs.github.com/en/rest)
 
-```sh
-npm run lint
-npm run typecheck
-npm test
-npm run build
-```
+<a name="frontend-verification"></a>
+<a name="testing-and-build"></a>
 
-For browser verification, prepare a dedicated PostgreSQL database named `devtrail_test_*` with the backend migration and owner seed commands. Use fixture credentials and run `npm run build` in both packages. Supply `E2E_DATABASE_URL`, `E2E_OWNER_USERNAME`, and `E2E_OWNER_PASSWORD` through the frontend test process environment. The suite creates fixture project and session rows and exercises deletion against its own fixtures. The test runner starts the compiled backend on loopback port 3102 and Vite preview on port 5174.
+## Verification
 
-```sh
-npx playwright install chromium
-npm run test:e2e
-```
+Run the backend checks from `backend/` and frontend checks from `frontend/`.
 
-Set `E2E_CHROMIUM_PATH` to use an installed Chromium-based browser. [Frontend CI](.github/workflows/frontend-ci.yml) runs the static checks, build, and browser suite against PostgreSQL 18.
+| Backend | Frontend |
+| --- | --- |
+| `npm run db:validate` | `npm run lint` |
+| `npm run typecheck` | `npm run typecheck` |
+| `npm test` | `npm test` |
+| `npm run test:db` | `npm run test:e2e` |
+| `npm run build` | `npm run build` |
 
-## Testing and build
+GitHub Actions runs these checks on pull requests targeting `main` and on pushes to `main`, using PostgreSQL 18. [Backend CI](.github/workflows/backend-ci.yml) · [Frontend CI](.github/workflows/frontend-ci.yml)
 
-From `backend/`, run the following checks. Supply `TEST_DATABASE_URL` through the process environment for a dedicated disposable database named `devtrail_test_*`, distinct from the application database. The integration suite applies migrations in a fresh schema and cleans up that schema after the run.
+Set `TEST_DATABASE_URL` to a dedicated `devtrail_test_*` database, separate from the application database. The PostgreSQL suite applies both migrations in an isolated fixture schema and cleans up that schema when finished.
 
-```sh
-npm run db:validate
-npm run typecheck
-npm test
-npm run test:db
-npm run build
-```
-
-[Backend CI](.github/workflows/backend-ci.yml) runs the same checks with a PostgreSQL 18 service for pull requests targeting `main` and pushes to `main`.
+For browser tests, migrate and seed a dedicated `devtrail_test_*` database with fixture credentials. Build both packages, provide `E2E_DATABASE_URL`, `E2E_OWNER_USERNAME`, and `E2E_OWNER_PASSWORD`, then run `npx playwright install chromium` and `npm run test:e2e` from `frontend/`. Set `E2E_CHROMIUM_PATH` to use an installed Chromium browser and `E2E_CAPTURE=1` to save screenshots in `frontend/test-results/`. The suite starts the API on port 3102 and Vite preview on port 5174. Override the defaults with `E2E_API_PORT` and `E2E_BROWSER_PORT`. [Local verification and release status](docs/ROADMAP.md)
 
 ## Spec-driven development
 
-Use [GitHub Spec Kit](https://github.com/github/spec-kit) for the next bounded change in the
-[approved roadmap](docs/ROADMAP.md#approved-delivery-packages). Open the repository in Codex
-with Python 3.11 or newer available as `python`. The checked-in skills are ready to use.
-For Spec Kit CLI maintenance, install the pinned release in an isolated Python environment
-with `python -m pip install specify-cli==1.4.5` and verify it with specify version.
-The generated Spec Kit files are distributed under the [upstream license](.specify/LICENSE).
+The [DevTrail Constitution](.specify/memory/constitution.md) governs feature work and
+material changes. Humans own requirements, specifications, architecture, technical
+planning, and acceptance criteria. AI agents assist throughout the process and
+primarily implement and verify approved decisions. [Engineering instructions](AGENTS.md)
 
-1. Start from the intended base on a dedicated Git branch. Run `$speckit-specify` in Codex
-   with the requested outcome and compatibility boundaries. Link the affected engineering
-   documents and record acceptance criteria and applicable test requirements in `specs/`.
-2. Use `$speckit-clarify` for open questions, then `$speckit-plan` to check the design
-   against the [constitution](.specify/memory/constitution.md) and include relevant
-   automated tests and verification commands. Resolve approval-required decisions
-   according to [AGENTS.md](AGENTS.md).
-3. Run `$speckit-tasks` to turn the plan into implementation and test tasks, then
-   review alignment with `$speckit-analyze`.
-4. Run `$speckit-implement` after reviewing the artifacts. Use `$speckit-converge` to
-   check for gaps and record verification results in the pull request.
+Use Python 3.11 or newer as `python` with the checked-in skills. For Spec Kit CLI maintenance, install the pinned release with `python -m pip install specify-cli==1.4.5` in an isolated Python environment and confirm it with `specify version`. [Upstream license](.specify/LICENSE)
 
-The feature artifacts describe the change under review. Link to the engineering
-documentation below for existing behavior and approved decisions.
+1. In Spec Kit, document the outcome, compatibility boundaries, acceptance criteria,
+   and applicable test requirements in the feature specification. Obtain explicit
+   human approval of the specification before advancing.
+2. If open questions require clarification, obtain explicit human approval of the
+   clarification artifacts before planning.
+3. In the plan's Constitution Check, explain how the design preserves useful
+   functionality, visual quality, usability, and product value where applicable.
+   Identify reused components, justify new abstractions and dependencies through
+   concrete requirements, and include verification commands. Obtain explicit human
+   approval of the planning artifacts before generating tasks.
+4. Generate tasks from the approved plan. Implement and verify the approved decisions.
 
-## Engineering documentation
+## Production
 
-- [Requirements](docs/REQUIREMENTS.md)
-- [Architecture and authentication](docs/ARCHITECTURE.md)
-- [Database design](docs/DATABASE.md)
-- [API contract](docs/API.md)
-- [Roadmap and foundation verification](docs/ROADMAP.md)
+Build both packages. From `backend/` apply pending migrations, provision the owner if needed, and run `npm start`. Serve `frontend/dist/` and the Express API under the same HTTPS origin. Forward `/api/*` to Express and serve the SPA entry point for browser routes. Set `APP_ORIGIN` to that origin and `TRUSTED_PROXY_IPS` to the explicitly trusted proxy addresses when terminating TLS upstream. `GET /api/v1/health` provides HTTP liveness.
+
+[Requirements](docs/REQUIREMENTS.md) · [Architecture](docs/ARCHITECTURE.md) · [Database](docs/DATABASE.md) · [API](docs/API.md) · [Roadmap](docs/ROADMAP.md)

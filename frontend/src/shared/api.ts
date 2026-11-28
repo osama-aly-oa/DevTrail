@@ -50,7 +50,7 @@ export function createTransport(auth: SessionCallbacks, adapter?: AxiosAdapter) 
   });
 
   async function send<T>(config: AxiosRequestConfig, token?: string) {
-    const isWrite = ['post', 'patch', 'delete'].includes(config.method ?? '');
+    const isWrite = ['post', 'put', 'patch', 'delete'].includes(config.method ?? '');
     const response = await client.request<T>({
       ...config,
       headers: isWrite && token ? { 'X-CSRF-Token': token } : undefined,

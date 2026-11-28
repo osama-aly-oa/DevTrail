@@ -52,6 +52,15 @@ describe('API transport', () => {
     expect(expired).toHaveBeenCalledOnce();
   });
 
+  it('includes the CSRF token on GitHub link replacement', async () => {
+    const adapter = vi.fn<AxiosAdapter>(async config => reply(config, { data: [] }));
+    const { api } = setup(adapter);
+    await api({ url: '/github/sessions/1/activity', method: 'put', data: { activityIds: ['2'] } });
+    const request = adapter.mock.calls[0]?.[0];
+    expect(request?.headers.get('X-CSRF-Token')).toBe(session.csrfToken);
+    expect(request?.data).toBe('{"activityIds":["2"]}');
+  });
+
   it('refreshes a rotated CSRF token and retries a rejected write once', async () => {
     const next = { ...session, csrfToken: 'rotated-fixture-token' };
     const adapter = vi.fn<AxiosAdapter>(async config => {

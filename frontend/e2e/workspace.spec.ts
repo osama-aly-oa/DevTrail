@@ -1,16 +1,29 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { BrowserContext, Page } from '@playwright/test';
 
 const api = '/api/v1';
 const fixtureOwner = process.env.E2E_OWNER_USERNAME!;
 const fixturePassword = process.env.E2E_OWNER_PASSWORD!;
+let ownerCookies: Awaited<ReturnType<BrowserContext['cookies']>>;
+
+test.beforeAll(async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL });
+  try {
+    const response = await context.request.post(api + '/auth/login', {
+      headers: { Origin: baseURL ?? '' }, data: { username: fixtureOwner, password: fixturePassword },
+    });
+    expect(response.status()).toBe(200);
+    ownerCookies = await context.cookies();
+  } finally {
+    await context.close();
+  }
+});
 
 async function signIn(page: Page, path = '/timeline') {
+  await page.context().addCookies(ownerCookies);
   await page.goto(path);
-  await page.getByLabel('Username').fill(fixtureOwner);
-  await page.getByLabel('Password').fill(fixturePassword);
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByRole('button', { name: 'Open global search and command palette' })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(path.split('?')[0] + '(?:\\?|$)'));
 }
 
@@ -82,7 +95,7 @@ test('protects deep links, restores a cookie session, rejects invalid login and 
     headers: { ...headers, Cookie: cookie!.name + '=' + cookie!.value },
   });
   expect(revoked.status()).toBe(204);
-  await page.getByRole('link', { name: 'Daily Timeline', exact: true }).click();
+  await page.getByRole('link', { name: 'Timeline', exact: true }).click();
   await expect(page.getByText('Your session ended. Sign in to continue.')).toBeVisible();
 
   await page.getByLabel('Username').fill(fixtureOwner);
@@ -335,5 +348,129 @@ test('fits all primary workspace screens at 320 CSS pixels', async ({ page }) =>
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
     });
   }
+  expect(errors).toEqual([]);
+});
+
+test('shows real metrics, searches evidence, exports a report, and persists appearance', async ({ page }) => {
+  const errors = observeErrors(page);
+  const project = 'Compiler Lab ' + randomUUID().slice(0, 6);
+  await signIn(page, '/overview');
+  const headers = await ownerHeaders(page);
+  const projectId = await addProject(page, project, headers);
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  const title = 'Trace source-map resolution';
+  const session = await page.request.post(api + '/sessions', { headers, data: {
+    projectId, title, sessionDate: today, durationMinutes: 125, workSummary: 'Compared decoded source map locations with emitted code.',
+    learningNotes: 'A source map preserves the relationship between source and generated positions.',
+    technologies: ['TypeScript', 'Vite'], categories: ['Testing'],
+  } });
+  expect(session.status()).toBe(201);
+  const milestone = await page.request.post(api + '/milestones', { headers, data: {
+    projectId, title: 'Compiler diagnostics baseline', criteria: 'Document source-map boundaries.', status: 'completed', completedDate: today,
+  } });
+  expect(milestone.status()).toBe(201);
+  const challengeTitle = 'Source-map offset mismatch ' + project.slice(-6);
+  const challenge = await page.request.post(api + '/challenges', { headers, data: {
+    projectId, title: challengeTitle, description: 'The first generated line used a different offset.',
+    solution: 'Normalize both positions before comparing.', status: 'resolved', resolvedDate: today, technologies: ['TypeScript'],
+  } });
+  expect(challenge.status()).toBe(201);
+  await page.reload();
+  await page.locator('.filter-popover summary').click();
+  await page.getByLabel('Project', { exact: true }).selectOption(projectId);
+  await page.getByRole('button', { name: 'Apply filters' }).click();
+  await expect(page.getByText('2h 5m', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('link', { name: new RegExp(title) })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Compiler diagnostics baseline/ })).toBeVisible();
+  await page.locator('.filter-popover summary').click();
+  if (process.env.E2E_CAPTURE) await page.screenshot({ path: 'test-results/v2-overview-desktop.png', fullPage: true });
+
+  await page.keyboard.press('Control+k');
+  await page.getByRole('dialog').getByRole('searchbox').fill(challengeTitle);
+  await page.getByRole('dialog').getByRole('searchbox').press('Enter');
+  await expect(page.getByRole('heading', { name: 'Global search' })).toBeVisible();
+  await page.getByRole('link', { name: new RegExp(challengeTitle) }).click();
+  await expect(page.getByText(challengeTitle, { exact: true })).toBeVisible();
+  await expect(page.getByText('Normalize both positions before comparing.')).toBeVisible();
+
+  await page.goto('/timeline?type=challenge&group=month&projectId=' + projectId);
+  await page.getByText(challengeTitle, { exact: true }).click();
+  await page.getByRole('button', { name: 'Event details' }).click();
+  const drawer = page.getByRole('dialog', { name: challengeTitle });
+  await expect(drawer.getByRole('link', { name: 'Open challenge' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(drawer).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Event details' })).toBeFocused();
+
+  await page.goto('/reports');
+  await page.getByLabel('Project', { exact: true }).selectOption(projectId);
+  await page.getByRole('button', { name: 'Build from records' }).click();
+  await expect(page.getByRole('heading', { name: title })).toBeVisible();
+  await page.getByRole('button', { name: 'Save report' }).click();
+  await expect(page).toHaveURL(/\/reports\?record=\d+$/);
+  const exported = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Markdown', exact: true }).click();
+  expect((await exported).suggestedFilename()).toContain('weekly-development-report-compiler-lab');
+  expect((await page.pdf()).subarray(0, 4).toString()).toBe('%PDF');
+  if (process.env.E2E_CAPTURE) await page.screenshot({ path: 'test-results/v2-report-desktop.png', fullPage: true });
+
+  await page.goto('/settings');
+  await page.getByRole('button', { name: 'Dark', exact: true }).click();
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Open navigation' }).click();
+  await page.getByRole('link', { name: 'Overview', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Development activity' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open navigation' })).toHaveAttribute('aria-expanded', 'false');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  if (process.env.E2E_CAPTURE) await page.screenshot({ path: 'test-results/v2-overview-mobile-dark.png', animations: 'disabled', fullPage: true });
+  await page.goto('/settings');
+  await page.getByRole('button', { name: 'Light', exact: true }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  expect(errors).toEqual([]);
+});
+
+test('writes a session, an insight with evidence, and a report manually', async ({ page }) => {
+  const errors = observeErrors(page);
+  await signIn(page, '/overview');
+  const headers = await ownerHeaders(page);
+  const projectId = await addProject(page, 'Manual writing ' + randomUUID().slice(0, 6), headers);
+
+  await page.getByRole('link', { name: 'Log a session', exact: true }).and(page.locator('.sidebar-action')).click();
+  await expect(page).toHaveURL(/\/sessions\/new$/);
+  await page.goto('/studio?projectId=' + projectId);
+  await expect(page).toHaveURL(/\/sessions\/new\?projectId=\d+$/);
+  await expect(page.getByLabel('Project', { exact: true })).toHaveValue(projectId);
+  const sessionTitle = 'Investigate request parsing';
+  await page.getByLabel('Session title').fill(sessionTitle);
+  const summary = page.getByLabel('Work summary', { exact: true });
+  await expect(summary).toHaveAccessibleDescription('Required for a final session. You can leave it blank when saving a draft.');
+  await page.getByRole('button', { name: 'Save session', exact: true }).click();
+  await expect(page.getByText('Work summary is required.')).toBeVisible();
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+  await expect(page.getByText('Draft saved.')).toBeVisible();
+  const sessions = await page.request.get(api + '/sessions?projectId=' + projectId);
+  expect((await sessions.json()).data).toMatchObject([{ status: 'draft', workSummary: '' }]);
+  const sessionId = page.url().split('/').at(-1);
+
+  await page.goto('/insights?projectId=' + projectId);
+  await page.getByText('Related sessions', { exact: true }).click();
+  await page.getByLabel('Find related sessions').fill(sessionTitle);
+  await page.getByRole('checkbox').click();
+  await page.getByLabel('Document title').fill('Request parsing observations');
+  await page.getByLabel('Markdown content').fill('Type guards made the parser easier to reason about.');
+  await page.getByRole('button', { name: 'Save insight', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Request parsing observations' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Session ' + sessionId })).toHaveAttribute('href', '/sessions/' + sessionId);
+
+  await page.goto('/reports?projectId=' + projectId);
+  await page.getByLabel('Document title').fill('Manual engineering report');
+  await page.getByLabel('Markdown content').fill('Reviewed request parsing and documented the remaining edge cases.');
+  await page.getByRole('button', { name: 'Save report', exact: true }).click();
+  await expect(page).toHaveURL(/\/reports\?record=\d+$/);
+  await expect(page.getByRole('heading', { name: 'Manual engineering report' })).toBeVisible();
   expect(errors).toEqual([]);
 });

@@ -1,44 +1,32 @@
 # DevTrail Architecture
 
-## Approved architecture
+## Application structure
 
-- Use a traditional layered monolith in a repository with `backend/` and `frontend/`.
-- Separate Express application construction from server startup so tests can import the application directly.
-- Controllers handle HTTP requests and responses. Services enforce business rules and own transaction boundaries where needed. Repositories encapsulate persistence. Middleware handles cross-cutting HTTP concerns, with centralized error handling.
-- Expose a REST API under `/api/v1`.
+DevTrail is a layered monolith in a two-package monorepo. `backend/src/app.ts` constructs Express and mounts the REST routers independently of server startup. Authentication lives in `auth/`, canonical records and read models in `domain/`, and external provider clients and integration routes in `integrations/`. Zod validates external input, Prisma manages persistence and transactions, and the shared error handler returns JSON errors without provider responses, credentials, or request body details.
 
-Keep designs simple. Microservices, CQRS, event sourcing, and other material architecture changes require justification and human approval.
+The Vite frontend uses React, TypeScript, Tailwind CSS, React Router, Axios, and Redux Toolkit. React Router owns workspace navigation and Redux keeps the owner session available to the transport layer. The browser stores the theme and sidebar preferences. The command palette opens with Ctrl+K or Cmd+K, and workspace pages use the shared shell, type, semantic color, form, and status components.
 
-## Approved stack
+Frontend and API share a browser origin. Vite proxies API requests in development. In production the host serves the frontend assets and forwards `/api/*` to Express under the same HTTPS origin. [Local and production setup](../README.md)
 
-| Area | Technology |
-| --- | --- |
-| Backend | Node.js, Express 5, TypeScript in strict mode, PostgreSQL, Prisma ORM and Prisma Migrate, Zod, Vitest, Supertest |
-| Frontend | React, TypeScript, Vite, React Router, Tailwind CSS, Axios, Redux Toolkit |
+<a name="approved-authentication-design"></a>
+<a name="selected-session-and-csrf-settings"></a>
 
-Use Redux Toolkit for genuinely shared application state. RTK Query is outside the MVP stack.
+## Authentication and request protection
 
-## Approved authentication design
+The PostgreSQL-backed owner session expires seven days after login. The server and cookie enforce the same deadline, and the session store periodically prunes expired rows. Logins regenerate the session ID, and logout destroys its server-side record and clears the cookie. Provisioning stores an Argon2id password hash. The session cookie is host-only, HTTP-only, `SameSite=Lax`, uses `Path=/`, and sets `Secure` on HTTPS. Local loopback HTTP is permitted in development and tests. TLS termination requires explicit trusted proxy configuration.
 
-Use server-side sessions stored in PostgreSQL for the single owner, with an initial seven-day expiration policy. Provision the initial owner through an idempotent database seed with credentials supplied through environment variables. Hash passwords with Argon2id. Use secure session cookies and CSRF protection. Require an authenticated session on protected product endpoints. JWT, public registration, and RBAC are outside the MVP design.
+Protected routes require an active owner session. Writes validate the browser `Origin` or the origin of `Referer` when `Origin` is absent. Authenticated writes also require the session-bound `X-CSRF-Token` header. Login is rate-limited and returns generic invalid-credential errors. A frontend request rejected for a rotated CSRF token can obtain the new owner session and retry once.
 
-### Selected session and CSRF settings
+React Router waits for `GET /auth/me` before opening the workspace. Redux Toolkit keeps session state in page memory with DevTools disabled. The browser manages the session cookie, and an ended session returns the owner to sign-in.
 
-These are implementation decisions for Package 01.
+The Markdown renderer escapes content and validates supported link protocols. Attachments are authenticated downloads with type and size checks, `Content-Disposition: attachment`, `nosniff`, and a sandbox policy. File signatures validate the declared image and PDF types.
 
-- Expire sessions seven days after login and enforce the deadline server-side. Set the cookie lifetime to the same deadline. Regenerate the session identifier on login, and destroy the stored session and clear its cookie on logout.
-- Set `HttpOnly`, `SameSite=Lax`, and `Path=/`, and omit `Domain` to keep the cookie host-only. Require `Secure` and HTTPS in deployed environments. Allow the secure flag to be disabled only for local loopback HTTP development. Configure trusted proxies explicitly if TLS terminates at a proxy.
-- Validate the browser origin of all state-changing requests, including login, against the configured application origin. Use `Origin` with a `Referer` origin fallback, and reject requests when neither supplies a matching origin. Also require a session-bound synchronizer token in a request header for authenticated writes, including logout. Keep the token out of URLs and server logs. [OWASP CSRF prevention guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
-- Serve browser requests to the UI and API from the same origin. A local development proxy can forward API requests from the frontend.
+## External integrations
 
-## Implemented Backend Core
+**GitHub.** The client makes read-only requests to the official API using an optional server token. Bounded pagination, outbound timeouts, retry-after handling, and a database lease limit synchronized work. A successful transaction updates the repository status and upserts its activity. Failed refreshes preserve the last successful activity. Repo identity and external activity IDs are unique within their applicable scopes. Imported GitHub content remains untrusted. [GitHub pagination](https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api)
 
-Express app construction remains separate from server startup. Startup validates configuration and checks PostgreSQL connectivity. Routing and transport policy are in the controller and middleware modules. Date policy and persistence are in the domain modules.
+## Query and reporting design
 
-Owner provisioning stores an Argon2id hash. Express sessions use the PostgreSQL store through connect-pg-simple, with a fixed expiry and periodic cleanup. The login route limits repeated credential attempts. Expected errors use the canonical JSON envelope. Unexpected errors log a fixed message without request data, credentials, session contents or raw database errors. [API contract](API.md) · [Verification](ROADMAP.md#package-01-verification)
+Analytics read a consistent snapshot of canonical records. Session time comes from recorded, finalized sessions. Projects with work can be compared without storing aggregate counters. When several technologies or categories share a session, minutes are split evenly within each breakdown and integer remainder minutes go to the earliest labels. Each matching label still counts that session. Learning activity derives from learning notes and the Learning category. Date-only and timestamp events group in the Istanbul calendar. Search uses bounded database queries.
 
-## Implemented frontend
-
-React Router protects the workspace until `GET /auth/me` resolves. Redux Toolkit holds session state in page memory with Redux DevTools disabled. The browser manages the HttpOnly cookie. Axios sends relative `/api/v1` requests and supplies the session-bound token on writes. A protected request that reports an ended session returns the owner to sign-in. A write rejected for a stale CSRF token can look up the current session and retry once.
-
-Project and session data stay in the routes that use them. Vite proxies the API to loopback in development, and history routes use the same paginated list endpoint. The URL keeps applied filters and offsets so the owner can reload or navigate back to a review. [Frontend contract](../specs/002-complete-frontend/contracts/frontend.md) · [Local setup](../README.md#frontend-setup-and-development)
+Reports are stored as reviewed Markdown snapshots. The frontend renders the report and can download Markdown or hand its print layout to the browser for PDF. Settings export a JSON snapshot of workspace records and integration metadata. Binary attachments are available from their sessions. [Database design](DATABASE.md)

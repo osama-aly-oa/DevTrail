@@ -6,6 +6,12 @@
 
 **Status**: Draft
 
+<!--
+  Humans own the requirements and acceptance criteria. Obtain explicit human approval
+  of the specification before advancing. If clarification is needed, obtain explicit
+  human approval of the clarification artifacts before planning.
+-->
+
 **Input**: User description: "$ARGUMENTS"
 
 ## User Scenarios & Testing *(mandatory)*

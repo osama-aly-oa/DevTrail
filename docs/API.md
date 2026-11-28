@@ -1,59 +1,86 @@
 # DevTrail API
 
-All routes are under `/api/v1`. The contract below is implemented by Backend Core.
+All endpoints use `/api/v1`. `GET /health` is public and returns HTTP 200 with `{"status":"ok"}`. Product routes require a valid owner session and return `Cache-Control: no-store`.
 
-## Implemented contracts
+<a name="implemented-contracts"></a>
+<a name="approved-conventions"></a>
 
-`GET /api/v1/health` is public and returns HTTP 200 with `{"status":"ok"}`. It reports HTTP liveness. Unmatched routes return HTTP 404 with `{"error":{"code":"NOT_FOUND","message":"Route not found."}}`. Unexpected errors handled before the response starts return HTTP 500 with `{"error":{"code":"INTERNAL_SERVER_ERROR","message":"An unexpected error occurred."}}`.
+## Common contracts
 
-## Approved MVP routes
+- Resources return `{"data":{...}}`. Collections return `{"data":[...],"pagination":{"offset":0,"limit":20,"hasMore":false}}` unless specified below. Mutations that delete successfully return HTTP 204 with an empty body.
+- IDs are positive decimal strings through the signed 64-bit maximum, without leading zeroes. Date-only fields use Gregorian `YYYY-MM-DD` and timestamps use ISO 8601 UTC. `from` and `to` are independently optional and inclusive, with `from <= to` when both are supplied. Timestamp filters use Istanbul calendar boundaries.
+- Pagination defaults to `offset=0` and `limit=20`. The maximum offset is 2,147,483,647 and maximum limit is 100. Unknown fields, unknown query parameters, and repeated query values are rejected by endpoints with strict schemas.
+- JSON writes require `Content-Type: application/json` and at most 256 KiB. Routes without bodies reject request bodies. Empty optional text is normalized to null. Omitted patch fields are retained.
+- Errors use `{"error":{"code":"CODE","message":"Human-readable message."}}`. Common responses include 400 invalid input, 401 unauthenticated, 403 rejected origin or CSRF, 404 missing resource, 409 conflicts, 413 oversized body, 415 unsupported media, 429 rate limited, and a generic 500 response.
+- Unmatched routes use `NOT_FOUND`. Unexpected errors use `INTERNAL_SERVER_ERROR`. A future session date rejected by the application uses `INVALID_INPUT`. A date rejected by the database guard uses `CONSTRAINT_VIOLATION`.
 
-| Method and path | Input | Success |
+<a name="approved-mvp-routes"></a>
+
+## Authentication
+
+| Method and path | Contract |
+| --- | --- |
+| `POST /auth/login` | JSON `{username,password}`. Returns 200 and a new session cookie. |
+| `GET /auth/me` | Returns the active session or 401. |
+| `POST /auth/logout` | Revokes the current session and clears the cookie. Returns 204. |
+
+Login and session lookup return `{data:{owner:{username},csrfToken,expiresAt}}`. All writes require a matching `Origin`, with the origin of `Referer` as fallback when `Origin` is absent. Authenticated writes, including a login replacing an active session, require `X-CSRF-Token`. The cookie is named `__Host-devtrail.sid` over HTTPS or `devtrail.sid` for local loopback HTTP. [Session security](ARCHITECTURE.md#authentication-and-request-protection)
+
+Login accepts usernames of 1–64 ASCII characters, starting with a letter or digit and allowing underscores, dots, and hyphens after the first character. Login passwords accept 1–256 Unicode code points. [Owner provisioning limits](../README.md#local-setup)
+
+## Projects and sessions
+
+| Method and path | Input or effect |
+| --- | --- |
+| `GET /projects` | Filters `q`, `status`, and pagination. Newest creation date and ID first. |
+| `POST /projects` | Requires `name`. Accepts `description`, `status`, `repositoryUrl`, `technologies`. Returns 201 with the project and its `Location`. |
+| `GET, PATCH, DELETE /projects/:id` | Reads, updates, or removes the project. Patches require one writable field. Deletion returns 409 while a session, challenge, or milestone references the project. |
+| `GET /sessions` | Filters `projectId`, `from`, `to`, `q`, `status`, `technology`, `category`, `tag`, `sort`, and pagination. `sort` is `newest` by default or `oldest`. Ties use creation date and ID. |
+| `POST /sessions` | Requires `projectId`, `sessionDate`, and a nonblank `workSummary` for a final session. Returns 201 with the session and its `Location`. |
+| `GET, PATCH, DELETE /sessions/:id` | Reads, updates, or removes a session. Reassignment removes old GitHub links. |
+
+Project status is `planned`, `active`, `on_hold`, `completed`, or `archived`. Session status is `draft` or `final`, defaulting to `final`. Additional writable session fields are `title`, `durationMinutes`, `workFocus`, `learningNotes`, `difficulties`, `solutions`, `nextSteps`, `technologies`, `tags`, `categories`, and `references`. Project and session resources include `id`, `createdAt`, and `updatedAt`. [Field limits](DATABASE.md#data-conventions)
+
+The activity category names are `Feature Development`, `Bug Fixing`, `Learning`, `Refactoring`, `Testing`, `Architecture & System Design`, `Documentation`, `DevOps & Deployment`, and `Code Review`.
+
+`GET /sessions/:id/attachments` returns an unpaginated `data` list with `id`, `name`, `mediaType`, `size`, and `createdAt`. `POST` to the same path accepts `{name,mediaType,content}` with canonical base64 `content` and returns 201. The five-file quota and 160 KiB file limit apply. Allowed types are plain text, Markdown, CSV, JSON, PDF, PNG, and JPEG. `GET /sessions/:id/attachments/:attachmentId` downloads the file and `DELETE` removes it.
+
+## Growth records
+
+For each resource, `GET /resource` lists records, `POST /resource` creates one, and `GET, PATCH, DELETE /resource/:id` operate on a single record. Creates return 201 with the record and `Location`. The table lists required fields followed by optional ones. Linked resources accept a `sessionIds` array of up to 100 IDs. Sending the array on patch replaces the link selection.
+
+| Resource | Required | Optional |
 | --- | --- | --- |
-| `POST /auth/login` | JSON `{username, password}` | 200 with session data and a new session cookie |
-| `GET /auth/me` | Active session cookie | 200 with session data |
-| `POST /auth/logout` | Active session cookie and CSRF protection | 204, clears cookie and revokes session |
-| `GET /projects` | Optional pagination query | 200 with project page |
-| `POST /projects` | JSON with required `name` and optional `description` | 201 with project and `Location: /api/v1/projects/{id}` |
-| `GET /projects/:id` | Project ID | 200 with project |
-| `PATCH /projects/:id` | JSON with at least one of `name`, `description` | 200 with updated project |
-| `DELETE /projects/:id` | Project ID | 204. Returns 409 if sessions reference the project, including concurrent writes. |
-| `GET /sessions` | Optional pagination, `projectId`, `from`, `to` | 200 with session page |
-| `POST /sessions` | JSON with required `projectId`, `sessionDate`, `workSummary`. Optional `workFocus`, `learningNotes`, `difficulties`, `nextSteps`. | 201 with development session and `Location: /api/v1/sessions/{id}` |
-| `GET /sessions/:id` | Development session ID | 200 with development session |
-| `PATCH /sessions/:id` | JSON with at least one writable session field from create | 200 with updated development session |
-| `DELETE /sessions/:id` | Development session ID | 204 |
+| `milestones` | `projectId`, `title` | `description`, `targetDate`, `status`, `completedDate`, `criteria`, `sessionIds` |
+| `challenges` | `projectId`, `title`, `description` | `rootCause`, `investigation`, `solution`, `lessons`, `status`, `resolvedDate`, `technologies`, `tags`, `references`, `sessionIds` |
+| `learning-goals` | `title`, `technology` | `projectId`, `notes`, `evidence`, `understanding`, `status`, `targetDate`, `sessionIds` |
+| `reports` | `title`, `kind`, `content` | `projectId`, `from`, `to` |
+| `insights` | `title`, `kind`, `content` | `projectId`, `sessionIds` |
+| `reflections` | `question`, `answer` | `projectId`, `feedback`, `sessionIds` |
 
-## Authentication and request protection
+Lists accept pagination, `q`, and `projectId`. Milestones, challenges, and learning goals apply `status`. Challenges and learning goals also apply `technology`. Reports and insights apply `kind`. Linked collections apply `sessionId`. Date filters use the applicable milestone, challenge, goal, or creation date.
 
-Login accepts a username of 1–64 ASCII letters or digits with underscores, dots and hyphens permitted after the first character. Login passwords contain 1–256 Unicode code points. The provisioned owner password has the additional setup requirements in the README. Login and current-session lookup return `{"data":{"owner":{"username":"owner"},"csrfToken":"<token>","expiresAt":"<UTC timestamp>"}}`.
+Milestone and goal statuses are `planned`, `active`, and `completed`. Challenge statuses are `open`, `in_progress`, and `resolved`. Completing a milestone or resolving a challenge defaults its date to today in Istanbul when a date has yet to be recorded. Goal understanding is `exploring`, `practicing`, or `comfortable`. Report kinds are `daily`, `weekly`, `monthly`, `project`, `learning`, `challenges`, and `retrospective`.
 
-Use the host-only cookie issued at login for protected requests. It is named `__Host-devtrail.sid` over HTTPS and `devtrail.sid` for local loopback HTTP. On authenticated writes, send the current `csrfToken` in the `X-CSRF-Token` header. Login uses that header when replacing an active session. All writes, including login, require a matching `Origin` or the origin of `Referer` when `Origin` is absent. Auth and protected route responses use `Cache-Control: no-store`. [Session lifetime and cookie policy](ARCHITECTURE.md#selected-session-and-csrf-settings)
+## Search and analytics
 
-## Approved conventions
+| Method and path | Contract |
+| --- | --- |
+| `GET /search` | Requires `q` and accepts `projectId` and `type`. Types are `projects`, `sessions`, `learning`, `technologies`, `challenges`, `milestones`, `reports`, and `github`. `data` maps the requested groups to up to eight matches each. Entries include an identifier, title, excerpt, and applicable navigation details. |
+| `GET /analytics` | Accepts `projectId`, `from`, `to`, `technology`, and `category`. Returns `totals`, `previous`, `days`, `learningDays`, `byProject`, `byTechnology`, `byCategory`, `challengeDays`, `milestoneDays`, `githubDays`, and `milestones` under `data`. `previous` uses the immediately preceding equally long period when both dates are supplied. |
 
-- A resource response is `{"data":{...}}`. A page is `{"data":[...],"pagination":{"offset":0,"limit":20,"hasMore":false}}`. HTTP 204 responses have an empty body.
-- A project contains `id`, `name`, `description`, `createdAt`, and `updatedAt`. A development session contains `id`, `projectId`, `sessionDate`, `workSummary`, `workFocus`, `learningNotes`, `difficulties`, `nextSteps`, `createdAt`, and `updatedAt`. Creation, update and expiration timestamps use ISO 8601 UTC strings with milliseconds.
-- IDs are positive decimal strings through the signed 64-bit maximum, with no signs or leading zeros. Session dates are Gregorian calendar dates in `YYYY-MM-DD` format, years 0001–9999. Session writes use today in Europe/Istanbul as the upper bound.
-- Text is trimmed and constrained by the approved Unicode code-point limits. Required text must remain nonblank. Optional text accepts null or blank text to clear it. Omitted patch fields retain their current value. [Text limits](DATABASE.md#selected-text-limits)
-- Pagination defaults to `offset=0` and `limit=20`. Offsets range from 0 to 2147483647 and limits from 1 to 100. Projects sort by descending `createdAt`, then `id`. Sessions sort by descending `sessionDate`, then `createdAt`, then `id`.
-- Session filters combine with AND. Both `from` and `to` are inclusive and independently optional. When both are supplied, `from` must be on or before `to`. Equal bounds select one date. A filter with no matches returns an empty page. Daily Timeline and Project Journey Review use this same list route.
-- JSON bodies must use `application/json`, fit within 256 KiB and use a supported encoding. Routes without declared request bodies reject bodies. Unknown body fields, unknown query parameters and repeated query parameters are invalid.
+## GitHub
 
-## Errors
+| Method and path | Contract |
+| --- | --- |
+| `GET /integrations/status` | Returns `{data:{github:{authenticated}}}`. The flag indicates whether the server has a GitHub token configured. |
+| `GET /github/repositories` | Returns an unpaginated repository list. |
+| `GET /github/repositories/:projectId` | Returns the connected repository or `{data:null}`. |
+| `POST /github/repositories` | Connects `{projectId,owner,name}` after validating access with GitHub. Returns 201. |
+| `POST /github/repositories/:projectId/sync` | Triggers a bounded refresh. Takes an empty body and returns the resulting repository. |
+| `DELETE /github/repositories/:projectId` | Disconnects and removes the imported activity and its links. |
+| `GET /github/activity` | Paged list with `total` in addition to the standard page fields. Filters accept `projectId`, `sessionId`, `kind`, `q`, `from`, and `to`. |
+| `GET /github/activity/:id` | Returns one imported activity item. |
+| `GET, PUT /github/sessions/:sessionId/activity` | Reads or replaces linked activity. PUT accepts `{activityIds}` with up to 50 IDs belonging to the session project. |
 
-Error responses use `{"error":{"code":"CODE","message":"Human-readable message."}}`. Clients can branch on status and code.
-
-| Status | Code | Meaning |
-| --- | --- | --- |
-| 400 | `INVALID_INPUT` | Invalid path, query, body or calendar date, including an application-level future-date rejection |
-| 400 | `CONSTRAINT_VIOLATION` | Persistence rejected invalid data, including the database’s future-date guard |
-| 401 | `INVALID_CREDENTIALS` | Username or password was incorrect |
-| 401 | `UNAUTHENTICATED` | No active owner session |
-| 403 | `HTTPS_REQUIRED`, `ORIGIN_FORBIDDEN`, `CSRF_FORBIDDEN` | Transport, origin or session-bound token check failed |
-| 404 | `NOT_FOUND` | Unknown route, missing target resource or missing project on a session write |
-| 409 | `PROJECT_NAME_TAKEN`, `PROJECT_HAS_SESSIONS` | Project name conflict or deletion restricted by existing sessions |
-| 413 | `PAYLOAD_TOO_LARGE` | Body exceeds the request size limit |
-| 415 | `UNSUPPORTED_MEDIA_TYPE` | Unsupported body type or encoding |
-| 429 | `LOGIN_RATE_LIMITED` | Too many login attempts |
-| 500 | `INTERNAL_SERVER_ERROR` | Unexpected server error |
+A repository includes `projectId`, `owner`, `name`, `defaultBranch`, `description`, `isPrivate`, `lastSyncAt`, `syncStatus`, `syncMessage`, and `url`. Status is `idle`, `syncing`, `synced`, `partial`, or `failed`. Activity includes `id`, `projectId`, `kind` (`commit` or `pull_request`), `externalId`, `title`, `url`, `author`, `occurredAt`, and `details`. Connection and sync share a local budget of eight calls per minute per owner. An upstream GitHub throttle yields HTTP 429 with `Retry-After`.

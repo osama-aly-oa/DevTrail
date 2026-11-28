@@ -5,7 +5,15 @@ import { maxOffset, pageSize } from '../../shared/domain';
 export interface ProjectInput {
   name: string;
   description: string | null;
+  status?: ProjectStatus;
+  repositoryUrl?: string | null;
+  technologies?: string[];
 }
+
+export const projectStatuses = {
+  planned: 'Planned', active: 'Active', on_hold: 'On hold', completed: 'Completed', archived: 'Archived',
+} as const;
+export type ProjectStatus = keyof typeof projectStatuses;
 
 export interface Project extends ProjectInput {
   id: string;
@@ -13,8 +21,8 @@ export interface Project extends ProjectInput {
   updatedAt: string;
 }
 
-export function getProjects(offset: number, signal: AbortSignal, limit = pageSize) {
-  return api<Page<Project>>({ url: '/projects', params: { offset, limit }, signal });
+export function getProjects(offset: number, signal: AbortSignal, limit = pageSize, filters?: { q?: string; status?: ProjectStatus }) {
+  return api<Page<Project>>({ url: '/projects', params: { ...filters, offset, limit }, signal });
 }
 
 export async function getProjectOptions(signal: AbortSignal) {

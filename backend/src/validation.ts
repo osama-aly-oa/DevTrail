@@ -27,6 +27,38 @@ function text(max: number) {
 
 export const requiredText = (max: number) => text(max).refine(value => value.length > 0);
 export const optionalText = (max: number) => text(max).nullable().transform(value => value || null);
+export const boundedText = text;
+
+export const webUrl = requiredText(2048).refine(value => {
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && /^https?:\/\//i.test(value);
+  } catch {
+    return false;
+  }
+});
+
+export const labels = z.array(requiredText(80)).max(24).transform(values => {
+  const labels = new Map<string, string>();
+  for (const value of values) {
+    const display = value.normalize('NFC');
+    const key = display.toLowerCase();
+    if (!labels.has(key)) labels.set(key, display);
+  }
+  return [...labels.values()];
+});
+
+export const links = z.array(webUrl).max(24).transform(values => [...new Set(values)]);
+export const linkedSessionIds = z.array(id).max(100).transform(values => [...new Set(values)]);
+
+export const activityCategories = z.enum([
+  'Feature Development', 'Bug Fixing', 'Learning', 'Refactoring', 'Testing', 'Architecture & System Design',
+  'Documentation', 'DevOps & Deployment', 'Code Review',
+]);
+
+export function containsText(value: string) {
+  return { contains: value.replace(/[\\%_]/g, '\\$&'), mode: 'insensitive' as const };
+}
 
 export const calendarDate = z.iso.date().refine(value => !value.startsWith('0000-'));
 

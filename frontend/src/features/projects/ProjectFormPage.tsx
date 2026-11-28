@@ -5,14 +5,18 @@ import { ApiError } from '../../shared/api';
 import { isId, optionalText, textError } from '../../shared/domain';
 import { Failure, Field, focusInvalid, Loading, PageHeader } from '../../shared/ui';
 import { useResource } from '../../shared/useResource';
-import { getProject, saveProject } from './api';
-import type { Project } from './api';
+import { externalUrl, splitList } from '../v2/format';
+import { getProject, projectStatuses, saveProject } from './api';
+import type { Project, ProjectStatus } from './api';
 
 function ProjectForm({ project }: { project?: Project }) {
   const navigate = useNavigate();
   const [name, setName] = useState(project?.name ?? '');
   const [description, setDescription] = useState(project?.description ?? '');
-  const [errors, setErrors] = useState<{ name?: string; description?: string }>({});
+  const [status, setStatus] = useState<ProjectStatus>(project?.status ?? 'active');
+  const [repositoryUrl, setRepositoryUrl] = useState(project?.repositoryUrl ?? '');
+  const [technologies, setTechnologies] = useState(project?.technologies?.join(', ') ?? '');
+  const [errors, setErrors] = useState<{ name?: string; description?: string; repositoryUrl?: string; technologies?: string }>({});
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
   const returnUrl = project ? '/projects/' + project.id : '/projects';
@@ -23,16 +27,22 @@ function ProjectForm({ project }: { project?: Project }) {
     const form = event.currentTarget;
     const nameError = textError(name, 'Project name', 120, true);
     const descriptionError = textError(description, 'Description', 2_000);
-    setErrors({ name: nameError, description: descriptionError });
+    const repositoryError = repositoryUrl.trim() && (!externalUrl(repositoryUrl.trim()) || repositoryUrl.trim().length > 2048)
+      ? 'Enter an HTTP or HTTPS repository URL.' : undefined;
+    const technologyList = splitList(technologies);
+    const technologiesError = technologyList.length > 24 || technologyList.some(value => textError(value, 'Technology', 80))
+      ? 'Enter up to 24 technologies with at most 80 characters each.' : undefined;
+    setErrors({ name: nameError, description: descriptionError, repositoryUrl: repositoryError, technologies: technologiesError });
     setFailure('');
-    if (nameError || descriptionError) {
+    if (nameError || descriptionError || repositoryError || technologiesError) {
       focusInvalid(form);
       return;
     }
 
     setBusy(true);
     try {
-      const saved = await saveProject({ name: name.trim(), description: optionalText(description) }, project?.id);
+      const saved = await saveProject({ name: name.trim(), description: optionalText(description), status,
+        repositoryUrl: optionalText(repositoryUrl), technologies: technologyList }, project?.id);
       if (form.isConnected) {
         void navigate('/projects/' + saved.id, {
           replace: true, state: { notice: project ? 'Project updated.' : 'Project created.' },
@@ -58,6 +68,21 @@ function ProjectForm({ project }: { project?: Project }) {
       <Field label="Description" error={errors.description} optional>
         {binding => <textarea {...binding} name="description" rows={5} value={description}
           onChange={event => setDescription(event.target.value)} />}
+      </Field>
+      <div className="form-grid">
+        <Field label="Status">
+          {binding => <select {...binding} value={status} onChange={event => setStatus(event.target.value as ProjectStatus)}>
+            {Object.entries(projectStatuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>}
+        </Field>
+        <Field label="Technologies" error={errors.technologies} optional>
+          {binding => <input {...binding} value={technologies} placeholder="React, PostgreSQL"
+            onChange={event => setTechnologies(event.target.value)} />}
+        </Field>
+      </div>
+      <Field label="Repository URL" error={errors.repositoryUrl} optional>
+        {binding => <input {...binding} type="url" value={repositoryUrl} placeholder="https://github.com/owner/repository"
+          onChange={event => setRepositoryUrl(event.target.value)} />}
       </Field>
       {failure && <p className="inline-error" role="alert">{failure}</p>}
       <div className="form-actions">

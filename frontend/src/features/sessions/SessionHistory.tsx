@@ -7,23 +7,31 @@ import { Empty, Failure, Field, focusInvalid, Loading, Notice, PageHeader, Pagin
 import { useResource } from '../../shared/useResource';
 import { getProjectOptions } from '../projects/api';
 import type { Project } from '../projects/api';
-import { getSessions } from './api';
+import { categories, getSessions, sessionTitle } from './api';
 import type { DevelopmentSession, SessionFilters } from './api';
+import { formatDuration } from '../overview/data';
+import '../v2/features.css';
 
-function historyUrl(path: string, filters: SessionFilters, offset = 0) {
+function historyUrl(path: string, filters: SessionFilters, offset = 0, tab?: string) {
   const params = new URLSearchParams();
-  if (filters.projectId) params.set('projectId', filters.projectId);
-  if (filters.from) params.set('from', filters.from);
-  if (filters.to) params.set('to', filters.to);
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) params.set(key, value);
+  }
+  if (tab) params.set('tab', tab);
   if (offset) params.set('offset', String(offset));
   return params.size ? path + '?' + params.toString() : path;
 }
 
-function FilterForm({ initial, projects, path }: { initial: SessionFilters; projects?: Project[]; path: string }) {
+function FilterForm({ initial, projects, path, tab }: { initial: SessionFilters; projects?: Project[]; path: string; tab?: string }) {
   const navigate = useNavigate();
   const [projectId, setProjectId] = useState(initial.projectId ?? '');
   const [from, setFrom] = useState(initial.from ?? '');
   const [to, setTo] = useState(initial.to ?? '');
+  const [q, setQuery] = useState(initial.q ?? '');
+  const [status, setStatus] = useState(initial.status ?? '');
+  const [technology, setTechnology] = useState(initial.technology ?? '');
+  const [category, setCategory] = useState(initial.category ?? '');
+  const [sort, setSort] = useState(initial.sort ?? 'newest');
   const [errors, setErrors] = useState<{ from?: string; to?: string }>({});
 
   function apply(event: FormEvent<HTMLFormElement>) {
@@ -36,12 +44,20 @@ function FilterForm({ initial, projects, path }: { initial: SessionFilters; proj
       focusInvalid(event.currentTarget);
       return;
     }
-    void navigate(historyUrl(path, { projectId: projectId || undefined, from: from || undefined, to: to || undefined }));
+    void navigate(historyUrl(path, {
+      projectId: projectId || undefined, from: from || undefined, to: to || undefined,
+      q: q.trim() || undefined, status: status === 'draft' || status === 'final' ? status : undefined,
+      technology: technology.trim() || undefined, category: category || undefined, sort: sort === 'oldest' ? sort : undefined,
+    }, 0, tab));
   }
 
   return (
-    <form className="surface filters" aria-label="Filter development sessions" onSubmit={apply} noValidate>
+    <form className="surface filters v2-session-filters" aria-label="Filter development sessions" onSubmit={apply} noValidate>
       <div className="filter-fields">
+        <Field label="Search sessions">
+          {binding => <input {...binding} type="search" value={q} onChange={event => setQuery(event.target.value)}
+            placeholder="Title, work or notes" maxLength={120} />}
+        </Field>
         {projects && (
           <Field label="Project">
             {binding => (
@@ -62,10 +78,31 @@ function FilterForm({ initial, projects, path }: { initial: SessionFilters; proj
           {binding => <input {...binding} type="date" min="0001-01-01" max="9999-12-31" value={to}
             onChange={event => setTo(event.target.value)} />}
         </Field>
+        <Field label="Session status">
+          {binding => <select {...binding} value={status} onChange={event => setStatus(event.target.value as typeof status)}>
+            <option value="">All sessions</option><option value="draft">Drafts</option><option value="final">Finalized</option>
+          </select>}
+        </Field>
+        <Field label="Sort by">
+          {binding => <select {...binding} value={sort} onChange={event => setSort(event.target.value as typeof sort)}>
+            <option value="newest">Newest first</option><option value="oldest">Oldest first</option>
+          </select>}
+        </Field>
+        <Field label="Technology">
+          {binding => <input {...binding} value={technology} onChange={event => setTechnology(event.target.value)}
+            placeholder="e.g. PostgreSQL" maxLength={80} />}
+        </Field>
+        <Field label="Activity category">
+          {binding => <select {...binding} value={category} onChange={event => setCategory(event.target.value)}>
+            <option value="">All categories</option>
+            {categories.map(value => <option key={value} value={value}>{value}</option>)}
+          </select>}
+        </Field>
       </div>
       <div className="filter-actions">
         <button className="button secondary" type="submit"><Filter aria-hidden="true" size={16} /> Apply filters</button>
-        {(initial.projectId || initial.from || initial.to) && <Link className="text-link" to={path}>Clear filters</Link>}
+        {Object.values(initial).some(Boolean) &&
+          <Link className="text-link" to={historyUrl(path, {}, 0, tab)}>Clear filters</Link>}
       </div>
     </form>
   );
@@ -96,11 +133,16 @@ function SessionGroups({ sessions, projectNames }: {
                   {projectNames && <Link className="project-tag" to={'/projects/' + session.projectId}>
                     {projectNames.get(session.projectId) ?? 'Project'}
                   </Link>}
-                  {session.workFocus && <p className="font-semibold">{session.workFocus}</p>}
-                  <p className="card-preview session-summary">{session.workSummary}</p>
+                  {(session.title || session.workFocus) && <p className="font-semibold" dir="auto">{sessionTitle(session)}</p>}
+                  {session.workSummary && <p className="card-preview session-summary" dir="auto">{session.workSummary}</p>}
+                  <div className="v2-chips">
+                    {session.status === 'draft' && <span className="v2-chip v2-chip-accent">Draft</span>}
+                    {session.durationMinutes && <span className="v2-chip">{formatDuration(session.durationMinutes)}</span>}
+                    {session.categories?.slice(0, 2).map(value => <span className="v2-chip" key={value}>{value}</span>)}
+                  </div>
                 </div>
                 <Link className="button secondary session-link" to={'/sessions/' + session.id}
-                  aria-label={'View session: ' + Array.from(session.workSummary).slice(0, 80).join('')}>
+                  aria-label={'View session: ' + (session.title || Array.from(session.workSummary).slice(0, 80).join('') || sessionTitle(session))}>
                   <NotebookPen aria-hidden="true" size={16} /> View session
                 </Link>
               </li>
@@ -123,16 +165,23 @@ export function SessionHistory({ project, projects }: { project?: Project; proje
   const ordered = !queryFrom || !queryTo || queryFrom <= queryTo;
   const from = ordered && isCalendarDate(queryFrom) ? queryFrom : undefined;
   const to = ordered && isCalendarDate(queryTo) ? queryTo : undefined;
-  const load = useCallback((signal: AbortSignal) => getSessions({ projectId, from, to }, offset, signal),
-    [projectId, from, to, offset]);
+  const q = search.get('q')?.trim().slice(0, 120) || undefined;
+  const queryStatus = search.get('status');
+  const status = queryStatus === 'draft' || queryStatus === 'final' ? queryStatus : undefined;
+  const technology = search.get('technology')?.trim().slice(0, 80) || undefined;
+  const category = categories.find(value => value === search.get('category'));
+  const sort = search.get('sort') === 'oldest' ? 'oldest' : undefined;
+  const tab = project ? search.get('tab') ?? undefined : undefined;
+  const load = useCallback((signal: AbortSignal) => getSessions({ projectId, from, to, q, status, technology, category, sort }, offset, signal),
+    [projectId, from, to, q, status, technology, category, sort, offset]);
   const { result, retry } = useResource(load);
-  const visibleFilters = { projectId: project ? undefined : projectId, from, to };
-  const hasFilters = Boolean(visibleFilters.projectId || from || to);
+  const visibleFilters: SessionFilters = { projectId: project ? undefined : projectId, from, to, q, status, technology, sort, category };
+  const hasFilters = Object.values(visibleFilters).some(Boolean);
   const logUrl = projectId ? '/sessions/new?projectId=' + projectId : '/sessions/new';
 
   return (
     <>
-      <FilterForm key={search.toString()} initial={visibleFilters} projects={projects} path={pathname} />
+      <FilterForm key={search.toString()} initial={visibleFilters} projects={projects} path={pathname} tab={tab} />
       {result.status === 'loading' && <Loading>Loading development sessions…</Loading>}
       {result.status === 'error' && <Failure message={result.error.message} retry={retry} />}
       {result.status === 'ready' && (
@@ -143,25 +192,27 @@ export function SessionHistory({ project, projects }: { project?: Project; proje
           ) : (
             <Empty title={offset ? 'No sessions on this page.' : hasFilters ? 'No sessions match these filters.' : 'No development sessions yet.'}>
               {offset
-                ? <Link className="button secondary" to={historyUrl(pathname, visibleFilters)}>First page</Link>
+                ? <Link className="button secondary" to={historyUrl(pathname, visibleFilters, 0, tab)}>First page</Link>
                 : hasFilters
-                  ? <Link className="button secondary" to={pathname}>Clear filters</Link>
+                  ? <Link className="button secondary" to={historyUrl(pathname, {}, 0, tab)}>Clear filters</Link>
                   : <Link className="button secondary" to={logUrl}>Record a session</Link>}
             </Empty>
           )}
-          <Pagination pagination={result.data.pagination} url={next => historyUrl(pathname, visibleFilters, next)} />
+          <Pagination pagination={result.data.pagination} url={next => historyUrl(pathname, visibleFilters, next, tab)} />
         </>
       )}
     </>
   );
 }
 
-export function TimelinePage() {
+export function SessionsPage() {
   const { result, retry } = useResource(getProjectOptions);
   return (
     <>
-      <PageHeader title="Daily Timeline" description="Review your development sessions, grouped by date."
-        actions={<Link className="button primary" to="/sessions/new"><Plus aria-hidden="true" size={18} /> Log session</Link>} />
+      <PageHeader title="Sessions" description="Find drafts and finalized development work by project, date, or technology."
+        actions={<>
+          <Link className="button secondary" to="/sessions/new"><Plus aria-hidden="true" size={18} /> Log session</Link>
+        </>} />
       <Notice />
       {result.status === 'loading' && <Loading>Loading projects…</Loading>}
       {result.status === 'error' && <Failure message={result.error.message} retry={retry} />}

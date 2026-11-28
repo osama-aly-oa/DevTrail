@@ -4,6 +4,7 @@ import { createSessionInfrastructure } from './auth/session.ts';
 import type { Config } from './config.ts';
 import type { Database } from './database.ts';
 import { createDomainRouter } from './domain/controllers.ts';
+import { createIntegrationRouter } from './integrations/controllers.ts';
 import { errorHandler, notFound } from './middleware/error-handler.ts';
 
 export function createApp(config: Config, database: Database) {
@@ -17,6 +18,7 @@ export function createApp(config: Config, database: Database) {
   });
   app.use('/api/v1/auth', createAuthRouter(config, database, sessions));
   app.use('/api/v1', createDomainRouter(config, database, sessions));
+  app.use('/api/v1', createIntegrationRouter(config, database, sessions));
   app.use(notFound);
   app.use(errorHandler);
 

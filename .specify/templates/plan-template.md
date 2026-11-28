@@ -42,6 +42,14 @@
 
 [Gates determined based on constitution file]
 
+<!--
+  Confirm explicit human approval of the specification and any clarification artifacts.
+  Explain how the design preserves useful functionality, visual quality, usability,
+  and product value as applicable. Identify reused components and justify each new
+  abstraction or dependency with a concrete requirement.
+  Obtain explicit human approval of the planning artifacts before generating tasks.
+-->
+
 ## Project Structure
 
 ### Documentation (this feature)

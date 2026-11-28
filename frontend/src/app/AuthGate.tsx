@@ -52,7 +52,7 @@ export function OwnerLogin() {
   const location = useLocation();
   if (auth.status === 'signedIn') {
     const from: unknown = location.state?.from;
-    const safePath = typeof from === 'string' && /^\/(?![\\/])/.test(from) ? from : '/timeline';
+    const safePath = typeof from === 'string' && /^\/(?![\\/])/.test(from) ? from : '/overview';
     return <Navigate to={safePath} replace />;
   }
   return <LoginPage expired={auth.status === 'guest' && auth.expired} />;

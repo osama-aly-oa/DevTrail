@@ -49,7 +49,8 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
     throw new Error('TRUSTED_PROXY_IPS must contain a comma-separated list of IP addresses.');
   }
 
-  return { port, database, sessionSecret, origin: origin.origin, secureCookies, trustedProxies };
+  const githubToken = env.GITHUB_TOKEN?.trim() || undefined;
+  return { port, database, sessionSecret, origin: origin.origin, secureCookies, trustedProxies, githubToken };
 }
 
 export type Config = ReturnType<typeof readConfig>;

@@ -2,11 +2,13 @@
 
 ## Core Principles
 
-### I. Simplicity
+### I. Meaningful Simplicity & Product Quality
 
-Deliver the smallest change that meets the approved acceptance criteria. Prefer repository
-conventions and existing components. Justify each new dependency or abstraction with a
-concrete need in the plan.
+Simplify unnecessary complexity without sacrificing useful functionality, visual quality, usability, or product value.
+
+Reuse existing components and justify new abstractions and dependencies through concrete requirements.
+
+Simplicity must not be interpreted as removing valuable features or excessively simplifying the user experience.
 
 ### II. Maintainable Architecture and Clean Code
 
@@ -28,12 +30,17 @@ Include relevant automated tests for changed behavior and regressions in the pla
 workflow, including PostgreSQL integration tests when applicable. Report the results and
 any checks that failed or could not run.
 
-### V. AI Implementation with Human Engineering Oversight
+### V. Human-Led Engineering & AI-Assisted Implementation
 
-Codex drafts specifications, proposes plans, implements approved scope, and reports the
-evidence. Humans decide product scope and approve material changes to requirements,
-architecture, stack, or public contracts. Follow the approval and repository controls in
-[AGENTS.md](../../AGENTS.md).
+Humans own product requirements, specifications, architectural decisions, technical planning, and acceptance criteria.
+
+AI agents assist with repository analysis, technical research, task decomposition, implementation, testing, and documentation.
+
+Specification, clarification, and planning artifacts must receive explicit human approval before progressing to the next respective stage.
+
+AI agents must not silently redefine approved requirements or engineering decisions.
+
+The primary responsibility of AI coding agents is to implement and verify human-approved engineering decisions.
 
 ### VI. Minimal Documentation
 
@@ -65,4 +72,4 @@ for incompatible governance changes, the minor version for new or expanded princ
 and the patch version for clarifications. Review affected workflow documentation and
 templates with each amendment.
 
-**Version** 1.0.0 | **Ratified** 2026-11-26 | **Last Amended** 2026-11-26
+**Version** 2.0.0 | **Ratified** 2026-11-26 | **Last Amended** 2026-11-28
