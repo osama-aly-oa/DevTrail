@@ -1,0 +1,65 @@
+name: Frontend CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify frontend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: devtrail_ci
+          POSTGRES_PASSWORD: devtrail_ci_fixture
+          POSTGRES_DB: devtrail_test_browser
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U devtrail_ci -d devtrail_test_browser"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      E2E_OWNER_USERNAME: browser_fixture
+      E2E_OWNER_PASSWORD: devtrail_ci_browser_fixture
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26.13.1'
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm ci
+        working-directory: backend
+      - run: npm run build
+        working-directory: backend
+      - name: Prepare disposable browser database
+        working-directory: backend
+        run: |
+          npm run db:migrate
+          npm run db:seed
+        env:
+          DATABASE_URL: postgresql://devtrail_ci:devtrail_ci_fixture@127.0.0.1:${{ job.services.postgres.ports[5432] }}/devtrail_test_browser
+          OWNER_USERNAME: ${{ env.E2E_OWNER_USERNAME }}
+          OWNER_PASSWORD: ${{ env.E2E_OWNER_PASSWORD }}
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+        env:
+          E2E_DATABASE_URL: postgresql://devtrail_ci:devtrail_ci_fixture@127.0.0.1:${{ job.services.postgres.ports[5432] }}/devtrail_test_browser
